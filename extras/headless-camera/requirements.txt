@@ -1,0 +1,6 @@
+aiortc>=1.6.0
+opencv-python>=4.8.0
+aiohttp>=3.9.0
+websockets>=12.0
+av>=10.0.0
+pyyaml>=6.0

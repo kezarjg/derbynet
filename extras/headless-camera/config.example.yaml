@@ -1,0 +1,33 @@
+# DerbyNet Headless Camera Configuration
+
+# DerbyNet server URL (required)
+server_url: http://derbynet.local
+
+# Camera device path (default: /dev/video0)
+# Use 'ls -l /dev/video*' to list available devices
+device: /dev/video0
+
+# Camera identifier for WebRTC signaling
+# WARNING: Do not change this! DerbyNet currently only supports a single
+# remote camera with ID 'camera-replay'. The viewer code is hardcoded to
+# look for this specific ID. Multiple cameras are not supported.
+camera_id: camera-replay
+
+# WebSocket URL for signaling (optional)
+# If null, will be auto-detected from server or fall back to HTTP polling
+# Example: ws://derbynet.local:8010
+websocket_url: null
+
+# Video resolution width in pixels
+width: 1280
+
+# Video resolution height in pixels
+height: 720
+
+# Video framerate (frames per second)
+# Lower values reduce CPU usage: 15 fps for Raspberry Pi 3, 30 fps for Pi 4
+framerate: 30
+
+# Polling interval in seconds (only used if WebSocket is unavailable)
+# Default: 1.0 second
+poll_interval: 1.0
