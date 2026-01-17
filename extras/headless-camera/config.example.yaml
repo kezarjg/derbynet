@@ -1,33 +1,35 @@
-# DerbyNet Headless Camera Configuration
+# DerbyNet Headless Camera Configuration Example
 
-# DerbyNet server URL (required)
-server_url: http://derbynet.local
+# Required: DerbyNet server URL
+server_url: "http://derbynet.local"
 
-# Camera device path (default: /dev/video0)
-# Use 'ls -l /dev/video*' to list available devices
-device: /dev/video0
+# Optional: WebSocket URL (will be auto-detected if not specified)
+# websocket_url: "ws://derbynet.local:8080/ws"
 
-# Camera identifier for WebRTC signaling
-# WARNING: Do not change this! DerbyNet currently only supports a single
-# remote camera with ID 'camera-replay'. The viewer code is hardcoded to
-# look for this specific ID. Multiple cameras are not supported.
-camera_id: camera-replay
+# Camera device (default: /dev/video0)
+device: "/dev/video0"
 
-# WebSocket URL for signaling (optional)
-# If null, will be auto-detected from server or fall back to HTTP polling
-# Example: ws://derbynet.local:8010
-websocket_url: null
+# Camera ID for registration (default: camera-replay)
+camera_id: "camera-replay"
 
-# Video resolution width in pixels
-width: 1280
-
-# Video resolution height in pixels
-height: 720
-
-# Video framerate (frames per second)
-# Lower values reduce CPU usage: 15 fps for Raspberry Pi 3, 30 fps for Pi 4
+# Video settings
+width: 640
+height: 480
 framerate: 30
 
-# Polling interval in seconds (only used if WebSocket is unavailable)
-# Default: 1.0 second
+# Polling interval for HTTP signaling in seconds (default: 1.0)
 poll_interval: 1.0
+
+# TURN server configuration (optional, for NAT traversal)
+# Uncomment and configure if you need TURN relay support
+# turn_urls:
+#   - "turn:turn.example.com:3478"
+#   - "turn:turn.example.com:3478?transport=tcp"
+# turn_username: "your-username"
+# turn_credential: "your-password"
+
+# Example with a public TURN server (if available):
+# turn_urls:
+#   - "turn:numb.viagenie.ca:3478"
+# turn_username: "webrtc@live.com"
+# turn_credential: "muazkh"

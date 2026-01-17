@@ -54,7 +54,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Suppress verbose ICE candidate negotiation messages
+# Set aioice to WARNING by default to reduce log noise
+# Use --verbose to see detailed ICE candidate pair checking
 logging.getLogger('aioice').setLevel(logging.WARNING)
 
 
@@ -85,6 +86,10 @@ class CameraConfig:
     height: int = 480
     framerate: int = 30
     poll_interval: float = 1.0  # seconds
+    # TURN server configuration (optional, for NAT traversal)
+    turn_urls: Optional[list] = None  # e.g., ["turn:turn.example.com:3478"]
+    turn_username: Optional[str] = None
+    turn_credential: Optional[str] = None
 
 
 class VideoCamera(VideoStreamTrack):
@@ -136,13 +141,23 @@ class VideoCamera(VideoStreamTrack):
 class ViewerConnection:
     """Manages a WebRTC connection to a single viewer"""
 
-    def __init__(self, viewer_id: str, video_track: VideoCamera, signaling):
+    def __init__(self, viewer_id: str, video_track: VideoCamera, signaling, config: CameraConfig):
         self.viewer_id = viewer_id
         self.video_track = video_track
         self.signaling = signaling
 
         # Create RTCConfiguration with STUN server
         ice_servers = [RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
+
+        # Add TURN server if configured
+        if config.turn_urls:
+            ice_servers.append(RTCIceServer(
+                urls=config.turn_urls,
+                username=config.turn_username,
+                credential=config.turn_credential
+            ))
+            logger.info(f"TURN server configured: {config.turn_urls}")
+
         configuration = RTCConfiguration(iceServers=ice_servers)
         self.pc = RTCPeerConnection(configuration=configuration)
 
@@ -153,7 +168,7 @@ class ViewerConnection:
         @self.pc.on("icecandidate")
         async def on_icecandidate(candidate):
             if candidate:
-                logger.debug(f"Sending ICE candidate to {viewer_id}: {candidate.type} {candidate.candidate[:50]}...")
+                logger.debug(f"Local ICE candidate for {viewer_id}: {candidate.candidate[:100]}")
                 await self.signaling.send_message({
                     'recipient': viewer_id,
                     'type': 'ice-candidate',
@@ -168,17 +183,25 @@ class ViewerConnection:
         # Set up ICE gathering state change handler
         @self.pc.on("icegatheringstatechange")
         async def on_icegatheringstatechange():
-            logger.info(f"ICE gathering state for {viewer_id}: {self.pc.iceGatheringState}")
+            logger.debug(f"ICE gathering state for {viewer_id}: {self.pc.iceGatheringState}")
 
         # Set up ICE connection state change handler
         @self.pc.on("iceconnectionstatechange")
         async def on_iceconnectionstatechange():
-            logger.info(f"ICE connection state for {viewer_id}: {self.pc.iceConnectionState}")
+            state = self.pc.iceConnectionState
+            if state in ('completed', 'failed', 'closed'):
+                logger.info(f"ICE connection state for {viewer_id}: {state}")
+            else:
+                logger.debug(f"ICE connection state for {viewer_id}: {state}")
 
         # Set up connection state change handler
         @self.pc.on("connectionstatechange")
         async def on_connectionstatechange():
-            logger.info(f"Connection to {viewer_id}: {self.pc.connectionState}")
+            state = self.pc.connectionState
+            if state in ('connected', 'failed', 'closed'):
+                logger.info(f"Connection to {viewer_id}: {state}")
+            else:
+                logger.debug(f"Connection to {viewer_id}: {state}")
 
         # Add video track
         self.pc.addTrack(video_track)
@@ -195,9 +218,14 @@ class ViewerConnection:
 
     async def send_offer(self):
         """Create and send WebRTC offer"""
-        logger.info(f"Creating offer for {self.viewer_id}")
+        logger.debug(f"Creating offer for {self.viewer_id}")
         offer = await self.pc.createOffer()
         await self.pc.setLocalDescription(offer)
+
+        # Log ICE candidates in the offer
+        sdp_lines = self.pc.localDescription.sdp.split('\n')
+        candidate_count = sum(1 for line in sdp_lines if line.startswith('a=candidate:'))
+        logger.debug(f"Offer for {self.viewer_id} contains {candidate_count} ICE candidates")
 
         await self.signaling.send_message({
             'recipient': self.viewer_id,
@@ -208,19 +236,25 @@ class ViewerConnection:
                 'sdp': self.pc.localDescription.sdp
             }
         })
-        logger.info(f"Sent offer to {self.viewer_id}")
+        logger.debug(f"Sent offer to {self.viewer_id}")
 
     async def handle_answer(self, msg: dict):
         """Handle SDP answer from viewer"""
-        logger.info(f"Received answer from {self.viewer_id}")
+        logger.debug(f"Received answer from {self.viewer_id}")
         try:
             answer = RTCSessionDescription(
                 sdp=msg['sdp']['sdp'],
                 type=msg['sdp']['type']
             )
+
+            # Log ICE candidates in the answer
+            sdp_lines = answer.sdp.split('\n')
+            candidate_count = sum(1 for line in sdp_lines if line.startswith('a=candidate:'))
+            logger.debug(f"Answer from {self.viewer_id} contains {candidate_count} ICE candidates")
+
             await self.pc.setRemoteDescription(answer)
         except InvalidStateError:
-            logger.warning(f"Ignoring stale answer from {self.viewer_id} (connection already established)")
+            logger.debug(f"Ignoring stale answer from {self.viewer_id} (connection already established)")
 
     async def handle_ice_candidate(self, msg: dict):
         """Handle ICE candidate from viewer"""
@@ -231,7 +265,8 @@ class ViewerConnection:
             sdp_mline_index = candidate_dict.get('sdpMLineIndex')
 
             if candidate_str:
-                logger.debug(f"Received ICE candidate from {self.viewer_id}: {candidate_str[:60]}...")
+                # Log the raw candidate string first
+                logger.debug(f"Remote ICE candidate from {self.viewer_id}: {candidate_str[:100]}")
 
                 # Parse the candidate string (format: "candidate:...")
                 # aiortc expects just the part after "candidate:"
@@ -244,9 +279,8 @@ class ViewerConnection:
                 candidate.sdpMLineIndex = sdp_mline_index
 
                 await self.pc.addIceCandidate(candidate)
-                logger.debug(f"Added ICE candidate for {self.viewer_id}")
             else:
-                logger.debug(f"Received empty ICE candidate from {self.viewer_id} (end of candidates)")
+                logger.debug(f"Received end-of-candidates signal from {self.viewer_id}")
         except Exception as e:
             logger.error(f"Error adding ICE candidate from {self.viewer_id}: {e}", exc_info=True)
 
@@ -477,7 +511,7 @@ class HeadlessCamera:
             await self.viewers[viewer_id].close()
 
         # Create new viewer connection
-        viewer = ViewerConnection(viewer_id, self.video_track, self.signaling)
+        viewer = ViewerConnection(viewer_id, self.video_track, self.signaling, self.config)
         self.viewers[viewer_id] = viewer
 
         await viewer.handle_solicitation(msg)
@@ -563,7 +597,10 @@ def load_config(config_file: str) -> CameraConfig:
             width=data.get('width', 640),
             height=data.get('height', 480),
             framerate=data.get('framerate', 30),
-            poll_interval=data.get('poll_interval', 1.0)
+            poll_interval=data.get('poll_interval', 1.0),
+            turn_urls=data.get('turn_urls'),
+            turn_username=data.get('turn_username'),
+            turn_credential=data.get('turn_credential')
         )
     except FileNotFoundError:
         logger.error(f"Config file not found: {config_file}")
@@ -585,12 +622,16 @@ async def main():
     parser.add_argument('--width', type=int, default=640, help='Video width (default: 640)')
     parser.add_argument('--height', type=int, default=480, help='Video height (default: 480)')
     parser.add_argument('--framerate', type=int, default=30, help='Video framerate (default: 30)')
+    parser.add_argument('--turn-url', action='append', dest='turn_urls', help='TURN server URL (can be specified multiple times)')
+    parser.add_argument('--turn-username', help='TURN server username')
+    parser.add_argument('--turn-credential', help='TURN server credential/password')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
 
     args = parser.parse_args()
 
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
+        logging.getLogger('aioice').setLevel(logging.INFO)
 
     # Load configuration
     if args.config:
@@ -605,7 +646,10 @@ async def main():
             websocket_url=ws_url,
             width=args.width,
             height=args.height,
-            framerate=args.framerate
+            framerate=args.framerate,
+            turn_urls=args.turn_urls,
+            turn_username=args.turn_username,
+            turn_credential=args.turn_credential
         )
     else:
         parser.error("Either --server or --config is required")
