@@ -153,7 +153,7 @@ class ViewerConnection:
         @self.pc.on("icecandidate")
         async def on_icecandidate(candidate):
             if candidate:
-                logger.info(f"Sending ICE candidate to {viewer_id}: {candidate.type} {candidate.candidate[:50]}...")
+                logger.debug(f"Sending ICE candidate to {viewer_id}: {candidate.type} {candidate.candidate[:50]}...")
                 await self.signaling.send_message({
                     'recipient': viewer_id,
                     'type': 'ice-candidate',
@@ -164,8 +164,6 @@ class ViewerConnection:
                         'sdpMLineIndex': candidate.sdpMLineIndex
                     }
                 })
-            else:
-                logger.info(f"ICE gathering complete for {viewer_id}")
 
         # Set up ICE gathering state change handler
         @self.pc.on("icegatheringstatechange")
@@ -230,7 +228,7 @@ class ViewerConnection:
             sdp_mline_index = candidate_dict.get('sdpMLineIndex')
 
             if candidate_str:
-                logger.info(f"Received ICE candidate from {self.viewer_id}: {candidate_str[:60]}...")
+                logger.debug(f"Received ICE candidate from {self.viewer_id}: {candidate_str[:60]}...")
 
                 # Parse the candidate string (format: "candidate:...")
                 # aiortc expects just the part after "candidate:"
@@ -243,9 +241,9 @@ class ViewerConnection:
                 candidate.sdpMLineIndex = sdp_mline_index
 
                 await self.pc.addIceCandidate(candidate)
-                logger.info(f"Added ICE candidate for {self.viewer_id}")
+                logger.debug(f"Added ICE candidate for {self.viewer_id}")
             else:
-                logger.info(f"Received empty ICE candidate from {self.viewer_id} (end of candidates)")
+                logger.debug(f"Received empty ICE candidate from {self.viewer_id} (end of candidates)")
         except Exception as e:
             logger.error(f"Error adding ICE candidate from {self.viewer_id}: {e}", exc_info=True)
 
