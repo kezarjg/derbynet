@@ -153,7 +153,7 @@ class ViewerConnection:
         @self.pc.on("icecandidate")
         async def on_icecandidate(candidate):
             if candidate:
-                logger.debug(f"Sending ICE candidate to {viewer_id}")
+                logger.info(f"Sending ICE candidate to {viewer_id}: {candidate.type} {candidate.candidate[:50]}...")
                 await self.signaling.send_message({
                     'recipient': viewer_id,
                     'type': 'ice-candidate',
@@ -164,6 +164,18 @@ class ViewerConnection:
                         'sdpMLineIndex': candidate.sdpMLineIndex
                     }
                 })
+            else:
+                logger.info(f"ICE gathering complete for {viewer_id}")
+
+        # Set up ICE gathering state change handler
+        @self.pc.on("icegatheringstatechange")
+        async def on_icegatheringstatechange():
+            logger.info(f"ICE gathering state for {viewer_id}: {self.pc.iceGatheringState}")
+
+        # Set up ICE connection state change handler
+        @self.pc.on("iceconnectionstatechange")
+        async def on_iceconnectionstatechange():
+            logger.info(f"ICE connection state for {viewer_id}: {self.pc.iceConnectionState}")
 
         # Set up connection state change handler
         @self.pc.on("connectionstatechange")
@@ -211,7 +223,6 @@ class ViewerConnection:
 
     async def handle_ice_candidate(self, msg: dict):
         """Handle ICE candidate from viewer"""
-        logger.debug(f"Received ICE candidate from {self.viewer_id}")
         try:
             candidate_dict = msg.get('candidate', {})
             candidate_str = candidate_dict.get('candidate', '')
@@ -219,6 +230,8 @@ class ViewerConnection:
             sdp_mline_index = candidate_dict.get('sdpMLineIndex')
 
             if candidate_str:
+                logger.info(f"Received ICE candidate from {self.viewer_id}: {candidate_str[:60]}...")
+
                 # Parse the candidate string (format: "candidate:...")
                 # aiortc expects just the part after "candidate:"
                 if candidate_str.startswith('candidate:'):
@@ -230,9 +243,11 @@ class ViewerConnection:
                 candidate.sdpMLineIndex = sdp_mline_index
 
                 await self.pc.addIceCandidate(candidate)
-                logger.debug(f"Added ICE candidate for {self.viewer_id}")
+                logger.info(f"Added ICE candidate for {self.viewer_id}")
+            else:
+                logger.info(f"Received empty ICE candidate from {self.viewer_id} (end of candidates)")
         except Exception as e:
-            logger.error(f"Error adding ICE candidate from {self.viewer_id}: {e}")
+            logger.error(f"Error adding ICE candidate from {self.viewer_id}: {e}", exc_info=True)
 
     async def close(self):
         """Close the peer connection"""
@@ -454,6 +469,11 @@ class HeadlessCamera:
             return
 
         logger.info(f"Received solicitation from {viewer_id}")
+
+        # Close any existing connection for this viewer to prevent orphaned connections
+        if viewer_id in self.viewers:
+            logger.info(f"Closing existing connection for {viewer_id} before creating new one")
+            await self.viewers[viewer_id].close()
 
         # Create new viewer connection
         viewer = ViewerConnection(viewer_id, self.video_track, self.signaling)
