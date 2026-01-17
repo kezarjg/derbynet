@@ -31,7 +31,7 @@ except ImportError:
 
 # WebRTC and media handling
 try:
-    from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer, VideoStreamTrack
+    from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer, VideoStreamTrack, InvalidStateError
     from aiortc.sdp import candidate_from_sdp
     from aiortc.contrib.media import MediaPlayer
     from av import VideoFrame
@@ -213,11 +213,14 @@ class ViewerConnection:
     async def handle_answer(self, msg: dict):
         """Handle SDP answer from viewer"""
         logger.info(f"Received answer from {self.viewer_id}")
-        answer = RTCSessionDescription(
-            sdp=msg['sdp']['sdp'],
-            type=msg['sdp']['type']
-        )
-        await self.pc.setRemoteDescription(answer)
+        try:
+            answer = RTCSessionDescription(
+                sdp=msg['sdp']['sdp'],
+                type=msg['sdp']['type']
+            )
+            await self.pc.setRemoteDescription(answer)
+        except InvalidStateError:
+            logger.warning(f"Ignoring stale answer from {self.viewer_id} (connection already established)")
 
     async def handle_ice_candidate(self, msg: dict):
         """Handle ICE candidate from viewer"""
