@@ -228,7 +228,7 @@ function TimerSimulator(options) {
         self.pendingHeat = heatInfo;
         self.currentLaneMask = heatInfo.laneMask;
         self.log('Heat ready: ' + heatInfo.className + ', Round ' + heatInfo.round +
-                 ', Heat ' + heatInfo.heat + ', mask=' + heatInfo.laneMask.toString(2));
+                 ', Heat ' + heatInfo.heat + ', mask=' + heatInfo.laneMask.toString(2).padStart(self.laneCount, '0'));
         self.onStateChange('ready');
         self.onHeatReady(heatInfo);
         // Fetch racer details including car numbers
