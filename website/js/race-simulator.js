@@ -375,6 +375,9 @@ $(function() {
       reverseLanes: typeof g_reverse_lanes !== 'undefined' ? g_reverse_lanes : false
     });
 
+    // Start continuous render loop for streaming
+    track.startRenderLoop();
+
     // Initialize camera simulator with canvas stream
     let stream = track.getStream(30);
     camera = new CameraSimulator(stream, {

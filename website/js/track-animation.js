@@ -206,6 +206,31 @@ function TrackAnimation(canvas, options) {
     return self.canvas.captureStream(fps || 30);
   };
 
+  // Start continuous render loop for streaming
+  // captureStream needs continuous drawing to produce frames
+  this.renderLoopRunning = false;
+  this.startRenderLoop = function() {
+    if (self.renderLoopRunning) return;
+    self.renderLoopRunning = true;
+
+    function renderFrame() {
+      if (!self.renderLoopRunning) return;
+
+      // Only draw if not in race animation (race animation handles its own drawing)
+      if (!self.animating) {
+        self.draw();
+      }
+
+      requestAnimationFrame(renderFrame);
+    }
+
+    requestAnimationFrame(renderFrame);
+  };
+
+  this.stopRenderLoop = function() {
+    self.renderLoopRunning = false;
+  };
+
   // Draw the track and cars
   this.draw = function() {
     let ctx = self.ctx;
