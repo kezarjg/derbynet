@@ -411,6 +411,9 @@ $(function() {
         track.setLaneMask(heat.laneMask);
         track.reset();
       },
+      onRacersLoaded: function(carNumbers) {
+        track.setCarNumbers(carNumbers);
+      },
       onAbort: function() {
         if (raceTimeout) {
           clearTimeout(raceTimeout);

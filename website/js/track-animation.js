@@ -56,9 +56,27 @@ function TrackAnimation(canvas, options) {
         dnf: false,
         dnfPosition: 0.3 + Math.random() * 0.4, // Random DNF stop point
         finished: false,
-        time: null
+        time: null,
+        carnumber: null,  // Car number to display
+        racerName: null   // Racer name (for tooltip/display)
       });
     }
+  };
+
+  // Set car numbers for each lane
+  // carNumbers: object mapping lane (1-indexed) to {carnumber, name, carname}
+  this.setCarNumbers = function(carNumbers) {
+    for (let i = 0; i < self.cars.length; i++) {
+      let lane = i + 1;  // Lanes are 1-indexed
+      if (carNumbers[lane]) {
+        self.cars[i].carnumber = carNumbers[lane].carnumber;
+        self.cars[i].racerName = carNumbers[lane].name;
+      } else {
+        self.cars[i].carnumber = null;
+        self.cars[i].racerName = null;
+      }
+    }
+    self.draw();
   };
 
   // Update lane count
@@ -303,6 +321,16 @@ function TrackAnimation(canvas, options) {
     // Windshield
     ctx.fillStyle = '#222';
     ctx.fillRect(x + 8, y + 5, self.carWidth - 16, 8);
+
+    // Draw car number on the car body
+    if (car.carnumber !== null && car.active) {
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(car.carnumber, x + self.carWidth / 2, y + self.carHeight / 2 + 3);
+      ctx.textBaseline = 'alphabetic';
+    }
 
     // Reset alpha
     ctx.globalAlpha = 1;

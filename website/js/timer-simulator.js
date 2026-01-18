@@ -14,12 +14,14 @@ function TimerSimulator(options) {
   this.connected = false;
   this.pendingHeat = null;
   this.currentLaneMask = 0;
+  this.currentRacers = [];  // Racers in current heat with car numbers
   this.lastHeartbeat = null;
   this.heartbeatInterval = null;
 
   // Callbacks
   this.onStateChange = options.onStateChange || function() {};
   this.onHeatReady = options.onHeatReady || function() {};
+  this.onRacersLoaded = options.onRacersLoaded || function() {};
   this.onAbort = options.onAbort || function() {};
   this.onLog = options.onLog || function() {};
 
@@ -229,6 +231,8 @@ function TimerSimulator(options) {
                  ', Heat ' + heatInfo.heat + ', mask=' + heatInfo.laneMask.toString(2));
         self.onStateChange('ready');
         self.onHeatReady(heatInfo);
+        // Fetch racer details including car numbers
+        self.fetchRacers();
       }
     }
 
@@ -237,6 +241,49 @@ function TimerSimulator(options) {
     if (failure.length > 0) {
       self.log('Server failure: ' + failure.text(), 'error');
     }
+  };
+
+  // Fetch racers for the current heat
+  this.fetchRacers = function() {
+    if (!self.pendingHeat) return;
+
+    $.ajax('poll.php', {
+      type: 'GET',
+      data: {
+        query: 'racers'
+      },
+      dataType: 'json',
+      success: function(data) {
+        if (data.racers) {
+          self.currentRacers = data.racers;
+          // Build a map of lane -> car number
+          let carNumbers = {};
+          for (let i = 0; i < data.racers.length; i++) {
+            let racer = data.racers[i];
+            carNumbers[racer.lane] = {
+              carnumber: racer.carnumber,
+              name: racer.name,
+              carname: racer.carname
+            };
+          }
+          self.log('Loaded ' + data.racers.length + ' racers for heat');
+          self.onRacersLoaded(carNumbers);
+        }
+      },
+      error: function(xhr, status, error) {
+        self.log('Failed to fetch racers: ' + error, 'error');
+      }
+    });
+  };
+
+  // Get car number for a lane (1-indexed)
+  this.getCarNumber = function(lane) {
+    for (let i = 0; i < self.currentRacers.length; i++) {
+      if (self.currentRacers[i].lane == lane) {
+        return self.currentRacers[i].carnumber;
+      }
+    }
+    return null;
   };
 
   // Get active lanes from lane mask
