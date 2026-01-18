@@ -371,7 +371,8 @@ $(function() {
     let canvas = document.getElementById('track-canvas');
     track = new TrackAnimation(canvas, {
       laneCount: settings.laneCount,
-      laneMask: 0xFF
+      laneMask: 0xFF,
+      reverseLanes: typeof g_reverse_lanes !== 'undefined' ? g_reverse_lanes : false
     });
 
     // Initialize camera simulator with canvas stream

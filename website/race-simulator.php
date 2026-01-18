@@ -8,6 +8,7 @@ require_once('inc/banner.inc');
 require_permission(SET_UP_PERMISSION);
 
 $nlanes = get_lane_count();
+$reverse_lanes = read_raceinfo_boolean('reverse-lanes');
 ?><!DOCTYPE html>
 <html>
 <head>
@@ -27,6 +28,7 @@ $nlanes = get_lane_count();
 <script type="text/javascript">
 g_websocket_url = <?php echo json_encode(read_raceinfo('_websocket_url', '')); ?>;
 var g_initial_lane_count = <?php echo $nlanes; ?>;
+var g_reverse_lanes = <?php echo $reverse_lanes ? 'true' : 'false'; ?>;
 </script>
 </head>
 <body>

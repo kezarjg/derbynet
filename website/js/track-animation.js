@@ -11,6 +11,7 @@ function TrackAnimation(canvas, options) {
   // Configuration
   this.laneCount = options.laneCount || 4;
   this.laneMask = options.laneMask || 0xFF;
+  this.reverseLanes = options.reverseLanes || false;
 
   // Track dimensions
   this.trackPadding = 20;
@@ -65,12 +66,21 @@ function TrackAnimation(canvas, options) {
 
   // Set car numbers for each lane
   // carNumbers: object mapping lane (1-indexed) to {carnumber, name, carname}
+  // Note: When lanes are reversed, visual lane 0 corresponds to RaceChart lane N
   this.setCarNumbers = function(carNumbers) {
     for (let i = 0; i < self.cars.length; i++) {
-      let lane = i + 1;  // Lanes are 1-indexed
-      if (carNumbers[lane]) {
-        self.cars[i].carnumber = carNumbers[lane].carnumber;
-        self.cars[i].racerName = carNumbers[lane].name;
+      // Map visual lane index to RaceChart lane number
+      let raceChartLane;
+      if (self.reverseLanes) {
+        // Visual lane 0 = RaceChart lane N, visual lane 1 = RaceChart lane N-1, etc.
+        raceChartLane = self.laneCount - i;
+      } else {
+        raceChartLane = i + 1;  // Lanes are 1-indexed
+      }
+
+      if (carNumbers[raceChartLane]) {
+        self.cars[i].carnumber = carNumbers[raceChartLane].carnumber;
+        self.cars[i].racerName = carNumbers[raceChartLane].name;
       } else {
         self.cars[i].carnumber = null;
         self.cars[i].racerName = null;
