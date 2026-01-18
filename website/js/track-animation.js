@@ -288,7 +288,9 @@ function TrackAnimation(canvas, options) {
     ctx.font = '14px sans-serif';
     for (let i = 0; i < self.laneCount; i++) {
       let x = startX + i * self.laneWidth + self.laneWidth / 2;
-      ctx.fillText((i + 1).toString(), x, height - 10);
+      // When reversed, visual lane 0 = lane N, visual lane 1 = lane N-1, etc.
+      let laneNum = self.reverseLanes ? (self.laneCount - i) : (i + 1);
+      ctx.fillText(laneNum.toString(), x, height - 10);
     }
 
     // Draw cars
