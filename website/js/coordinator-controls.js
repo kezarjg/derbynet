@@ -453,7 +453,7 @@ function handle_replay_settings_submit() {
     $.ajax(g_action_url,
            {type: 'POST',
             data: $("#replay_settings_modal form").serialize(),
-            success: function(data) { process_coordinator_poll_response(data); }
+            success: function(data) { process_coordinator_poll_json(data); }
            });
 }
 

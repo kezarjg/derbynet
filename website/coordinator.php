@@ -41,6 +41,9 @@ $warn_no_timer = warn_no_timer();
       $("#replay-rate option[value='<?php
          echo read_raceinfo('replay-rate', '50'); ?>']").attr('selected', 'selected');
       mobile_select_refresh('#replay-rate');
+      $("#replay-record-after option[value='<?php
+         echo read_raceinfo('replay-record-after', '2000'); ?>']").attr('selected', 'selected');
+      mobile_select_refresh('#replay-record-after');
     });
 </script>
 <style>
@@ -211,20 +214,36 @@ input.lane-time::-webkit-outer-spin-button {
 
 <div id='replay_settings_modal' class="modal_dialog hidden block_buttons">
   <form>
+    <h3>Replay Settings</h3>
     <input type="hidden" name="action" value="settings.write"/>
-    <label for="replay-skipback">Duration of replay, in seconds:</label>
+    <label for="replay-skipback">Seconds before last finisher to capture:</label>
     <!-- Value in milliseconds, must match as a string -->
     <select id="replay-skipback" name="replay-skipback">
-        <!-- <option value="2000">2.0</option> -->
+        <option value="2000">2.0</option>
         <option value="2500">2.5</option>
         <option value="3000">3.0</option>
         <option value="3500">3.5</option>
         <option value="4000">4.0</option>
         <option value="4500">4.5</option>
         <option value="5000">5.0</option>
-        <!-- <option value="5500">5.5</option> -->
+        <option value="5500">5.5</option>
         <option value="6000">6.0</option>
-        <!-- <option value="6500">6.5</option> -->
+        <option value="6500">6.5</option>
+        <option value="0">Entire race</option>
+    </select>
+
+    <label for="replay-record-after">Seconds after last finisher to capture:</label>
+    <!-- Value in milliseconds -->
+    <select id="replay-record-after" name="replay-record-after">
+        <option value="0">0.0</option>
+        <option value="500">0.5</option>
+        <option value="1000">1.0</option>
+        <option value="1500">1.5</option>
+        <option value="2000">2.0</option>
+        <option value="2500">2.5</option>
+        <option value="3000">3.0</option>
+        <option value="3500">3.5</option>
+        <option value="4000">4.0</option>
     </select>
 
     <label for="replay-num-showings">Number of times to show replay:</label>
@@ -244,6 +263,7 @@ input.lane-time::-webkit-outer-spin-button {
         <option value="75">0.75x</option>
         <option value="100">1x</option>
     </select>
+    <p style="font-size: smaller; font-style: italic;">Note: Replay kiosks must be refreshed to pick up changes.</p>
     <input type="submit" value="Submit"/>
     <input type="button" value="Cancel"
       onclick='close_modal("#replay_settings_modal");'/>

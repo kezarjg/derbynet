@@ -148,7 +148,7 @@ if (have_permission(TIMER_MESSAGE_PERMISSION)) {
       record_timer_finish(EVENT_TIMER_RESULT_REFUSED, $results, null);
     } else {
       if (write_heat_results($results)) {
-        send_replay_REPLAY();
+        send_replay_REPLAY($results);
         write_raceinfo('timer_current', '');
         $current = get_running_round();
         advance_heat($current, 'next', /* show failure */ false);

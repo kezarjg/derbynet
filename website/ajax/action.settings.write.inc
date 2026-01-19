@@ -65,6 +65,7 @@ if (have_permission(SET_UP_PERMISSION)) {
     'racing_scene' => array('setting' => 'racing_scene'),
     'replay-num-showings' => array('setting' => 'replay-num-showings', 'type' => 'int'),
     'replay-rate' => array('setting' => 'replay-rate', 'type' => 'number'),
+    'replay-record-after' => array('setting' => 'replay-record-after', 'type' => 'number'),
     'replay-skipback' => array('setting' => 'replay-skipback', 'type' => 'number'),
     'reverse-lanes' => array('setting' => 'reverse-lanes', 'type' => 'checkbox'),
     'rotation-schedule' => array('setting' => 'rotation-schedule'),
