@@ -12,6 +12,8 @@ $(function() {
   let autoMode = false;
   let raceTimeout = null;
   let startTime = null;
+  let timerEnabled = true;
+  let cameraEnabled = true;
 
   // Injection flags (one-shot)
   let injectDnfNext = false;
@@ -47,7 +49,9 @@ $(function() {
       tieProbability: $('#tie-probability').val(),
       preDelay: $('#pre-delay').val(),
       postDelay: $('#post-delay').val(),
-      includeAnomalies: $('#include-anomalies').is(':checked')
+      includeAnomalies: $('#include-anomalies').is(':checked'),
+      timerEnabled: $('#timer-enabled').is(':checked'),
+      cameraEnabled: $('#camera-enabled').is(':checked')
     };
     localStorage.setItem('raceSimulatorSettings', JSON.stringify(settings));
   }
@@ -67,6 +71,14 @@ $(function() {
         if (typeof settings.includeAnomalies !== 'undefined') {
           $('#include-anomalies').prop('checked', settings.includeAnomalies);
         }
+        if (typeof settings.timerEnabled !== 'undefined') {
+          $('#timer-enabled').prop('checked', settings.timerEnabled);
+          timerEnabled = settings.timerEnabled;
+        }
+        if (typeof settings.cameraEnabled !== 'undefined') {
+          $('#camera-enabled').prop('checked', settings.cameraEnabled);
+          cameraEnabled = settings.cameraEnabled;
+        }
       } catch (e) {
         console.error('Failed to load settings:', e);
       }
@@ -75,6 +87,19 @@ $(function() {
     // Set initial lane count from server if available
     if (typeof g_initial_lane_count !== 'undefined' && g_initial_lane_count > 0) {
       $('#lane-count').val(g_initial_lane_count);
+    }
+
+    // Apply initial panel states
+    updatePanelState('timer-status-panel', timerEnabled);
+    updatePanelState('camera-status-panel', cameraEnabled);
+  }
+
+  // Update panel visual state
+  function updatePanelState(panelId, enabled) {
+    if (enabled) {
+      $('#' + panelId).removeClass('disabled');
+    } else {
+      $('#' + panelId).addClass('disabled');
     }
   }
 
@@ -299,6 +324,11 @@ $(function() {
   function startAuto() {
     if (running) return;
 
+    if (!timerEnabled) {
+      log('Cannot start auto mode: timer is disabled', 'error');
+      return;
+    }
+
     running = true;
     autoMode = true;
     startTime = Date.now();
@@ -355,10 +385,14 @@ $(function() {
 
     log('Simulator reset');
 
-    // Reconnect
-    setTimeout(function() {
-      timer.connect();
-    }, 500);
+    // Reconnect timer if enabled
+    if (timerEnabled) {
+      setTimeout(function() {
+        timer.connect();
+      }, 500);
+    } else {
+      updateTimerStatus('disabled');
+    }
   }
 
   // Initialize components
@@ -429,11 +463,19 @@ $(function() {
       onLog: log
     });
 
-    // Start camera signaling
-    camera.startSignaling();
+    // Start camera signaling (if enabled)
+    if (cameraEnabled) {
+      camera.startSignaling();
+    } else {
+      $('#stream-status').text('Disabled');
+    }
 
-    // Connect timer
-    timer.connect();
+    // Connect timer (if enabled)
+    if (timerEnabled) {
+      timer.connect();
+    } else {
+      updateTimerStatus('disabled');
+    }
 
     // Set up runtime timer
     setInterval(updateRuntime, 1000);
@@ -455,6 +497,10 @@ $(function() {
   $('#reset-btn').on('click', reset);
 
   $('#single-race-btn').on('click', function() {
+    if (!timerEnabled) {
+      log('Cannot run race: timer is disabled', 'error');
+      return;
+    }
     if (!timer.pendingHeat) {
       log('No heat ready for single race', 'error');
       return;
@@ -482,6 +528,39 @@ $(function() {
 
   $('#timing-mode, #dnf-probability, #tie-probability, #pre-delay, #post-delay, #include-anomalies')
     .on('change', saveSettings);
+
+  // Timer toggle
+  $('#timer-enabled').on('change', function() {
+    timerEnabled = $(this).is(':checked');
+    updatePanelState('timer-status-panel', timerEnabled);
+    saveSettings();
+
+    if (timerEnabled) {
+      log('Timer enabled');
+      timer.connect();
+    } else {
+      log('Timer disabled');
+      timer.disconnect();
+      updateTimerStatus('disabled');
+      updateHeatInfo(null);
+    }
+  });
+
+  // Camera toggle
+  $('#camera-enabled').on('change', function() {
+    cameraEnabled = $(this).is(':checked');
+    updatePanelState('camera-status-panel', cameraEnabled);
+    saveSettings();
+
+    if (cameraEnabled) {
+      log('Camera enabled');
+      camera.startSignaling();
+    } else {
+      log('Camera disabled');
+      // Camera will stop accepting new connections but existing ones continue
+      $('#stream-status').text('Disabled');
+    }
+  });
 
   // Initialize
   init();

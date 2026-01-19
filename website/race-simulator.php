@@ -33,6 +33,7 @@ var g_reverse_lanes = <?php echo $reverse_lanes ? 'true' : 'false'; ?>;
 </head>
 <body>
 <?php make_banner('Race Simulator', false); ?>
+<div id="version-tag" style="position:fixed;bottom:5px;right:10px;font-size:10px;color:#666;">v1.0.5</div>
 
 <div id="simulator-container">
   <div id="left-panel">
@@ -123,7 +124,12 @@ var g_reverse_lanes = <?php echo $reverse_lanes ? 'true' : 'false'; ?>;
     </div>
 
     <div id="timer-status-panel" class="panel">
-      <h3>Timer Status</h3>
+      <h3>Timer Status
+        <label class="feature-toggle">
+          <input type="checkbox" id="timer-enabled" checked/>
+          <span class="toggle-slider"></span>
+        </label>
+      </h3>
       <div class="status-row">
         <span class="status-label">State:</span>
         <span id="timer-state" class="status-value">Disconnected</span>
@@ -143,7 +149,12 @@ var g_reverse_lanes = <?php echo $reverse_lanes ? 'true' : 'false'; ?>;
     </div>
 
     <div id="camera-status-panel" class="panel">
-      <h3>Camera Status</h3>
+      <h3>Camera Status
+        <label class="feature-toggle">
+          <input type="checkbox" id="camera-enabled" checked/>
+          <span class="toggle-slider"></span>
+        </label>
+      </h3>
       <div class="status-row">
         <span class="status-label">Viewers:</span>
         <span id="viewer-count" class="status-value">0</span>
