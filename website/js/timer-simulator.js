@@ -9,6 +9,8 @@ function TimerSimulator(options) {
   this.timerName = options.timerName || 'RaceSimulator';
   this.humanName = options.humanName || 'Race Simulator';
   this.identifier = options.identifier || 'SIM-' + Math.random().toString(36).substr(2, 8).toUpperCase();
+  this.dnfTimeout = options.dnfTimeout || 10000;  // 10 second timeout for DNF
+  this.dnfTime = options.dnfTime || 9.999;        // Time value sent for DNF
 
   // State
   this.connected = false;
@@ -18,11 +20,18 @@ function TimerSimulator(options) {
   this.lastHeartbeat = null;
   this.heartbeatInterval = null;
 
+  // Race timing state
+  this.raceInProgress = false;
+  this.raceTimeoutId = null;
+  this.laneTimes = [];      // Array of times for each lane (null = not yet reported)
+  this.raceStartTime = null;
+
   // Callbacks
   this.onStateChange = options.onStateChange || function() {};
   this.onHeatReady = options.onHeatReady || function() {};
   this.onRacersLoaded = options.onRacersLoaded || function() {};
   this.onAbort = options.onAbort || function() {};
+  this.onRaceFinished = options.onRaceFinished || function() {};  // Called when timer sends results
   this.onLog = options.onLog || function() {};
 
   // Connect to the server
@@ -138,6 +147,143 @@ function TimerSimulator(options) {
         self.log('STARTED failed: ' + error, 'error');
       }
     });
+  };
+
+  // Start a race - initializes lane tracking and timeout
+  // Called when the gate opens to begin timing
+  this.startRace = function() {
+    if (self.raceInProgress) {
+      self.log('Race already in progress', 'error');
+      return;
+    }
+
+    self.raceInProgress = true;
+    self.raceStartTime = performance.now();
+    self.laneTimes = new Array(self.laneCount).fill(null);
+
+    // Send STARTED to server
+    self.sendStarted();
+
+    // Set timeout for DNF
+    self.raceTimeoutId = setTimeout(function() {
+      self.log('Race timeout - sending results');
+      self.finishRace();
+    }, self.dnfTimeout);
+
+    self.log('Race started, timeout in ' + (self.dnfTimeout / 1000) + 's');
+  };
+
+  // Report a lane finish time
+  // lane: 0-indexed lane number
+  // time: finish time in seconds
+  this.reportLaneTime = function(lane, time) {
+    if (!self.raceInProgress) {
+      self.log('No race in progress for lane ' + (lane + 1), 'error');
+      return;
+    }
+
+    if (lane < 0 || lane >= self.laneCount) {
+      self.log('Invalid lane ' + (lane + 1), 'error');
+      return;
+    }
+
+    if (self.laneTimes[lane] !== null) {
+      self.log('Lane ' + (lane + 1) + ' already reported', 'error');
+      return;
+    }
+
+    // Only accept times for active lanes
+    if ((self.currentLaneMask & (1 << lane)) === 0) {
+      self.log('Lane ' + (lane + 1) + ' not active', 'error');
+      return;
+    }
+
+    self.laneTimes[lane] = time;
+    self.log('Lane ' + (lane + 1) + ' finished: ' + time.toFixed(3) + 's');
+
+    // Check if all active lanes have reported
+    if (self.allLanesFinished()) {
+      self.log('All lanes finished');
+      self.finishRace();
+    }
+  };
+
+  // Check if all active lanes have reported times
+  this.allLanesFinished = function() {
+    for (let i = 0; i < self.laneCount; i++) {
+      if ((self.currentLaneMask & (1 << i)) !== 0 && self.laneTimes[i] === null) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // Finish the race - send results to server
+  this.finishRace = function() {
+    if (!self.raceInProgress) {
+      return;
+    }
+
+    // Clear timeout
+    if (self.raceTimeoutId) {
+      clearTimeout(self.raceTimeoutId);
+      self.raceTimeoutId = null;
+    }
+
+    self.raceInProgress = false;
+
+    // Build final times array - fill in DNF time for unreported lanes
+    let finalTimes = [];
+    let hasDnf = false;
+    for (let i = 0; i < self.laneCount; i++) {
+      if ((self.currentLaneMask & (1 << i)) === 0) {
+        // Inactive lane
+        finalTimes.push(null);
+      } else if (self.laneTimes[i] === null) {
+        // Active lane that didn't report - DNF
+        finalTimes.push(self.dnfTime);
+        hasDnf = true;
+      } else {
+        finalTimes.push(self.laneTimes[i]);
+      }
+    }
+
+    if (hasDnf) {
+      self.log('DNF detected - using timeout value ' + self.dnfTime);
+    }
+
+    // Calculate places
+    let places = self.calculatePlaces(finalTimes);
+
+    // Send to server
+    self.sendFinished(finalTimes, places);
+
+    // Notify that race is finished
+    self.onRaceFinished(finalTimes, places);
+  };
+
+  // Calculate places from times
+  this.calculatePlaces = function(times) {
+    let indexed = times.map(function(t, i) { return {time: t, lane: i}; });
+    let valid = indexed.filter(function(x) { return x.time !== null && x.time > 0; });
+    valid.sort(function(a, b) { return a.time - b.time; });
+
+    let places = new Array(times.length).fill(null);
+    for (let i = 0; i < valid.length; i++) {
+      places[valid[i].lane] = i + 1;
+    }
+    return places;
+  };
+
+  // Abort current race
+  this.abortRace = function() {
+    if (self.raceTimeoutId) {
+      clearTimeout(self.raceTimeoutId);
+      self.raceTimeoutId = null;
+    }
+    self.raceInProgress = false;
+    self.laneTimes = [];
+    self.log('Race aborted');
   };
 
   // Send FINISHED message with lane times

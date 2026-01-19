@@ -233,6 +233,11 @@ $(function() {
   }
 
   // Run a single race
+  // The animation and timer now work asynchronously:
+  // 1. Animation starts and triggers timer.startRace() via onRaceStart callback
+  // 2. As cars cross finish line, animation reports times via onLaneFinish callback
+  // 3. Timer sends results immediately when all lanes finish OR timeout occurs (DNF)
+  // 4. Animation continues independently for visual display
   function runRace() {
     let settings = getSettings();
     let laneCount = settings.laneCount;
@@ -250,53 +255,48 @@ $(function() {
       laneMask = (1 << laneCount) - 1;
     }
 
-    // Generate finish times
+    // Generate finish times (null for DNF - animation will show car stopping mid-track)
     let times = generateFinishTimes(laneCount, laneMask, settings);
-    let places = calculatePlaces(times);
 
     // Filter out null times for display
     let validTimes = times.filter(function(t) { return t !== null && t > 0; });
     let maxTime = validTimes.length > 0 ? Math.max.apply(null, validTimes) : 4;
+    let hasDnf = times.some(function(t, i) {
+      return (laneMask & (1 << i)) !== 0 && t === null;
+    });
 
-    log('Starting race (max time: ' + maxTime.toFixed(3) + 's)' + (timerEnabled ? '' : ' [visual only]'));
+    log('Starting race (max time: ' + maxTime.toFixed(3) + 's)' +
+        (hasDnf ? ' [has DNF]' : '') +
+        (timerEnabled ? '' : ' [visual only]'));
 
-    // Send STARTED (only if timer enabled)
-    if (timerEnabled) {
-      timer.sendStarted();
-    }
-
-    // Start animation
+    // Start animation - this will trigger onRaceStart callback which starts the timer
+    // The animation's onLaneFinish callback will report times to the timer
+    // DNF cars don't report times - the timer will timeout after 10s
     track.startRace(times);
+  }
 
-    // Schedule FINISHED after max time
+  // Schedule next race after post-delay (called when timer finishes or animation completes)
+  function scheduleNextRace() {
+    let settings = getSettings();
+
     raceTimeout = setTimeout(function() {
-      // Send results (only if timer enabled)
-      if (timerEnabled) {
-        timer.sendFinished(times, places);
-      }
-      stats.races++;
-      updateStats();
-
-      // Schedule post-delay, then either next race (auto mode) or end sequence
-      raceTimeout = setTimeout(function() {
-        if (autoMode && running) {
-          // If timer disabled, always run next race; if enabled, need pending heat
-          if (!timerEnabled || timer.pendingHeat) {
-            // Start staging for next race
-            track.startStaging();
-            raceTimeout = setTimeout(function() {
-              if (running) runRace();
-            }, settings.preDelay);
-          } else {
-            // No next heat ready, end the sequence
-            track.endSequence();
-          }
+      if (autoMode && running) {
+        // If timer disabled, always run next race; if enabled, need pending heat
+        if (!timerEnabled || timer.pendingHeat) {
+          // Start staging for next race
+          track.startStaging();
+          raceTimeout = setTimeout(function() {
+            if (running) runRace();
+          }, settings.preDelay);
         } else {
-          // Single race mode - end the sequence
+          // No next heat ready, end the sequence
           track.endSequence();
         }
-      }, settings.postDelay);
-    }, maxTime * 1000 + 100); // Add small buffer
+      } else {
+        // Single race mode - end the sequence
+        track.endSequence();
+      }
+    }, settings.postDelay);
   }
 
   // Update statistics display
@@ -388,6 +388,11 @@ $(function() {
       raceTimeout = null;
     }
 
+    // Abort any in-progress race timing
+    if (timerEnabled && timer && timer.raceInProgress) {
+      timer.abortRace();
+    }
+
     $('#start-btn').prop('disabled', false);
     $('#stop-btn').prop('disabled', true);
 
@@ -429,12 +434,39 @@ $(function() {
 
     let settings = getSettings();
 
-    // Initialize track animation
+    // Initialize track animation with callbacks for async timer interaction
     let canvas = document.getElementById('track-canvas');
     track = new TrackAnimation(canvas, {
       laneCount: settings.laneCount,
       laneMask: 0xFF,
-      reverseLanes: typeof g_reverse_lanes !== 'undefined' ? g_reverse_lanes : false
+      reverseLanes: typeof g_reverse_lanes !== 'undefined' ? g_reverse_lanes : false,
+
+      // Called when the race starts (gate opens)
+      onRaceStart: function() {
+        if (timerEnabled) {
+          timer.startRace();
+        }
+      },
+
+      // Called when a car crosses the finish line
+      // lane: 0-indexed visual lane
+      // time: finish time in seconds
+      onLaneFinish: function(lane, time) {
+        if (timerEnabled) {
+          timer.reportLaneTime(lane, time);
+        }
+      },
+
+      // Called when animation is complete (all cars finished or stopped)
+      onAllFinished: function() {
+        // If timer is disabled, we handle stats and scheduling here
+        if (!timerEnabled) {
+          stats.races++;
+          updateStats();
+          scheduleNextRace();
+        }
+        // If timer is enabled, onRaceFinished callback handles this
+      }
     });
 
     // Start continuous render loop for streaming
@@ -486,8 +518,16 @@ $(function() {
           clearTimeout(raceTimeout);
           raceTimeout = null;
         }
+        timer.abortRace();
         track.reset();
         log('Race aborted', 'error');
+      },
+      // Called when timer sends results to server (all lanes finished or timeout)
+      onRaceFinished: function(times, places) {
+        stats.races++;
+        updateStats();
+        // Schedule next race after post-delay
+        scheduleNextRace();
       },
       onLog: log
     });

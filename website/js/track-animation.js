@@ -13,6 +13,11 @@ function TrackAnimation(canvas, options) {
   this.laneMask = options.laneMask || 0xFF;
   this.reverseLanes = options.reverseLanes || false;
 
+  // Callbacks
+  this.onLaneFinish = options.onLaneFinish || function() {};  // Called when a car crosses finish line
+  this.onRaceStart = options.onRaceStart || function() {};    // Called when gate opens
+  this.onAllFinished = options.onAllFinished || function() {}; // Called when animation completes
+
   // Track dimensions
   this.trackPadding = 20;
   this.laneWidth = 60;
@@ -186,6 +191,10 @@ function TrackAnimation(canvas, options) {
     }
 
     self.animating = true;
+
+    // Notify that race has started (gate opened)
+    self.onRaceStart();
+
     requestAnimationFrame(self.animate.bind(self));
   };
 
@@ -205,6 +214,7 @@ function TrackAnimation(canvas, options) {
 
       if (car.dnf) {
         // DNF: animate to random stop position then stop
+        // DNF cars do NOT report to the timer - they wait for timeout
         let dnfTime = car.dnfPosition * 5; // DNF happens over ~2.5 seconds
         car.progress = Math.min(car.dnfPosition, elapsed / dnfTime * car.dnfPosition);
         if (car.progress < car.dnfPosition) {
@@ -219,6 +229,9 @@ function TrackAnimation(canvas, options) {
 
         if (car.progress >= 1 && !car.finished) {
           car.finished = true;
+          // Notify that this lane has crossed the finish line
+          // Pass the visual lane index and the finish time
+          self.onLaneFinish(i, finishTime);
         }
 
         if (car.progress < 1) {
@@ -229,7 +242,7 @@ function TrackAnimation(canvas, options) {
 
     self.draw();
 
-    // Continue animation until all cars finished
+    // Continue animation until all cars finished (or DNF cars have stopped)
     if (!allFinished) {
       requestAnimationFrame(self.animate.bind(self));
     } else {
@@ -237,6 +250,8 @@ function TrackAnimation(canvas, options) {
       self.raceComplete = true;
       self.phase = 'finished';
       self.draw();
+      // Notify that animation is complete
+      self.onAllFinished();
     }
   };
 
