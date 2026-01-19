@@ -407,14 +407,14 @@ function TrackAnimation(canvas, options) {
     ctx.fillStyle = '#222';
     ctx.fillRect(x + 8, y + 5, self.carWidth - 16, 8);
 
-    // Draw car number on the car body
+    // Draw car number on the car body (below the windshield)
     if (car.carnumber !== null && car.active) {
       ctx.globalAlpha = 1;  // Ensure full opacity for car number
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 12px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(car.carnumber, x + self.carWidth / 2, y + self.carHeight / 2 + 3);
+      ctx.fillText(car.carnumber, x + self.carWidth / 2, y + self.carHeight - 7);
       ctx.textBaseline = 'alphabetic';
     }
 
