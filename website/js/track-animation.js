@@ -411,10 +411,10 @@ function TrackAnimation(canvas, options) {
     if (car.carnumber !== null && car.active) {
       ctx.globalAlpha = 1;  // Ensure full opacity for car number
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 12px sans-serif';
+      ctx.font = 'bold 10px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(car.carnumber, x + self.carWidth / 2, y + self.carHeight - 7);
+      ctx.fillText(car.carnumber, x + self.carWidth / 2, y + self.carHeight - 5);
       ctx.textBaseline = 'alphabetic';
     }
 
