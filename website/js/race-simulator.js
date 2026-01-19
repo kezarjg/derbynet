@@ -234,14 +234,21 @@ $(function() {
 
   // Run a single race
   function runRace() {
-    if (!timer || !timer.connected || !timer.pendingHeat) {
-      log('Cannot start race: no heat ready', 'error');
-      return;
-    }
-
     let settings = getSettings();
-    let laneMask = timer.currentLaneMask;
     let laneCount = settings.laneCount;
+    let laneMask;
+
+    // If timer is enabled, require connection and pending heat
+    if (timerEnabled) {
+      if (!timer || !timer.connected || !timer.pendingHeat) {
+        log('Cannot start race: no heat ready', 'error');
+        return;
+      }
+      laneMask = timer.currentLaneMask;
+    } else {
+      // Timer disabled - use all lanes
+      laneMask = (1 << laneCount) - 1;
+    }
 
     // Generate finish times
     let times = generateFinishTimes(laneCount, laneMask, settings);
@@ -251,25 +258,33 @@ $(function() {
     let validTimes = times.filter(function(t) { return t !== null && t > 0; });
     let maxTime = validTimes.length > 0 ? Math.max.apply(null, validTimes) : 4;
 
-    log('Starting race (max time: ' + maxTime.toFixed(3) + 's)');
+    log('Starting race (max time: ' + maxTime.toFixed(3) + 's)' + (timerEnabled ? '' : ' [visual only]'));
 
-    // Send STARTED
-    timer.sendStarted();
+    // Send STARTED (only if timer enabled)
+    if (timerEnabled) {
+      timer.sendStarted();
+    }
 
     // Start animation
     track.startRace(times);
 
     // Schedule FINISHED after max time
     raceTimeout = setTimeout(function() {
-      timer.sendFinished(times, places);
+      // Send results (only if timer enabled)
+      if (timerEnabled) {
+        timer.sendFinished(times, places);
+      }
       stats.races++;
       updateStats();
 
       // If auto mode, schedule next race
       if (autoMode && running) {
         raceTimeout = setTimeout(function() {
-          if (running && timer.pendingHeat) {
-            runRace();
+          if (running) {
+            // If timer disabled, always run next race; if enabled, need pending heat
+            if (!timerEnabled || timer.pendingHeat) {
+              runRace();
+            }
           }
         }, settings.postDelay);
       }
@@ -324,11 +339,6 @@ $(function() {
   function startAuto() {
     if (running) return;
 
-    if (!timerEnabled) {
-      log('Cannot start auto mode: timer is disabled', 'error');
-      return;
-    }
-
     running = true;
     autoMode = true;
     startTime = Date.now();
@@ -336,13 +346,21 @@ $(function() {
     $('#start-btn').prop('disabled', true);
     $('#stop-btn').prop('disabled', false);
 
-    log('Auto mode started');
+    log('Auto mode started' + (timerEnabled ? '' : ' [visual only]'));
 
-    // Connect timer if not connected
-    if (!timer.connected) {
-      timer.connect();
-    } else if (timer.pendingHeat) {
-      // Start racing after pre-delay
+    if (timerEnabled) {
+      // Connect timer if not connected
+      if (!timer.connected) {
+        timer.connect();
+      } else if (timer.pendingHeat) {
+        // Start racing after pre-delay
+        let settings = getSettings();
+        raceTimeout = setTimeout(function() {
+          if (running) runRace();
+        }, settings.preDelay);
+      }
+    } else {
+      // Timer disabled - start racing immediately after pre-delay
       let settings = getSettings();
       raceTimeout = setTimeout(function() {
         if (running) runRace();
@@ -497,11 +515,7 @@ $(function() {
   $('#reset-btn').on('click', reset);
 
   $('#single-race-btn').on('click', function() {
-    if (!timerEnabled) {
-      log('Cannot run race: timer is disabled', 'error');
-      return;
-    }
-    if (!timer.pendingHeat) {
+    if (timerEnabled && !timer.pendingHeat) {
       log('No heat ready for single race', 'error');
       return;
     }
