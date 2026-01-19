@@ -18,7 +18,7 @@ function TrackAnimation(canvas, options) {
   this.laneWidth = 60;
   this.trackLength = canvas.height - 80; // Leave room for start/finish
   this.startY = 40;
-  this.finishY = this.startY + this.trackLength - 25;
+  this.finishY = this.startY + this.trackLength - 45;
 
   // Car dimensions
   this.carWidth = 40;
@@ -111,7 +111,7 @@ function TrackAnimation(canvas, options) {
     let totalWidth = self.laneCount * self.laneWidth + self.trackPadding * 2;
     self.canvas.width = Math.max(400, totalWidth);
     self.trackLength = self.canvas.height - 80;
-    self.finishY = self.startY + self.trackLength - 25;
+    self.finishY = self.startY + self.trackLength - 45;
   };
 
   // Reset to starting position
