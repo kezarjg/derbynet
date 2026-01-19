@@ -135,6 +135,12 @@ function drain_queue() {
 function send_replay_TEST() {
   // test <skipback_seconds> <repeat> <rate>
   $skipback = read_raceinfo('replay-skipback', '4000');
+
+  // If skipback is 0 ("Entire race"), use 10 seconds (covers DNF timeout)
+  if ($skipback == 0 || $skipback == '0') {
+    $skipback = 10000;
+  }
+
   $num_showings = read_raceinfo('replay-num-showings', '2');
   $rate = read_raceinfo('replay-rate', '50');
   send_replay_message("TEST ".$skipback." ".$num_showings." ".$rate);
@@ -148,8 +154,33 @@ function send_replay_START(&$current) {
 }
 
 // "REPLAY skipback showings rate  -- stop recording if recording; playback\r\n"
-function send_replay_REPLAY() {
+// Uses the configured replay-skipback setting.
+// If replay-skipback is 0 ("Entire race"), calculate from race results if available.
+// If $results is provided (array of {time, place} from parse_heat_results),
+// calculate skipback from the longest finish time to capture the entire race.
+function send_replay_REPLAY($results = null) {
   $skipback = read_raceinfo('replay-skipback', '4000');
+
+  // If skipback is 0 ("Entire race"), calculate from results or use 10s default
+  if ($skipback == 0 || $skipback == '0') {
+    $skipback = 10000;  // Default for entire race (covers DNF timeout)
+
+    // If results are available, calculate skipback from longest finish time
+    if ($results !== null) {
+      $max_time_ms = 0;
+      foreach ($results as $result) {
+        if (isset($result['time'])) {
+          $time_ms = floatval($result['time']) * 1000;
+          $max_time_ms = max($max_time_ms, $time_ms);
+        }
+      }
+      if ($max_time_ms > 0) {
+        // Add 500ms margin for pre-start moment
+        $skipback = intval($max_time_ms) + 500;
+      }
+    }
+  }
+
   $num_showings = read_raceinfo('replay-num-showings', '2');
   $rate = read_raceinfo('replay-rate', '50');
   send_replay_message("REPLAY ".$skipback." ".$num_showings." ".$rate);
@@ -163,6 +194,12 @@ function send_replay_CANCEL() {
 // RACE_STARTS skipback showings rate -- induce a replay in replay-skipback less epsilon
 function send_replay_RACE_STARTS() {
   $skipback = read_raceinfo('replay-skipback', '4000');
+
+  // If skipback is 0 ("Entire race"), use 10 seconds (covers DNF timeout)
+  if ($skipback == 0 || $skipback == '0') {
+    $skipback = 10000;
+  }
+
   $num_showings = read_raceinfo('replay-num-showings', '2');
   $rate = read_raceinfo('replay-rate', '50');
   send_replay_message("RACE_STARTS $skipback $num_showings $rate");

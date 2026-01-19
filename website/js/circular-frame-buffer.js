@@ -175,8 +175,9 @@ function CircularFrameBuffer(stream, length_ms) {
   // on_playback_finished -- callback invoked when a playback finishes
   //    (may be called repeat times)
   // on_done -- callback to be invoked when playback completes.
+  // playback_length_ms -- optional length in ms for this playback (defaults to length_ms)
   this.playback = function(canvas, repeat, playback_rate,
-                           on_precanvas, on_playback_finished, on_done) {
+                           on_precanvas, on_playback_finished, on_done, playback_length_ms) {
     if (!frames) {
       console.log("No frames for playback! (" + now_msg + ")");
       if (on_done) {
@@ -211,9 +212,13 @@ function CircularFrameBuffer(stream, length_ms) {
     }
 
     // frame_times[last_recorded_frame_index] is the time of the last captured frame
-    // frame_times[last_recorded_frame_index] - length_ms is the time of the
+    // frame_times[last_recorded_frame_index] - playback_length_ms is the time of the
     // first frame for playback
-    let start_goal = frame_times[last_recorded_frame_index] - Math.round(length_ms);
+    // If playback_length_ms not specified, use the recording length_ms
+    if (!playback_length_ms) {
+      playback_length_ms = length_ms;
+    }
+    let start_goal = frame_times[last_recorded_frame_index] - Math.round(playback_length_ms);
     console.log("Playback from " + now_msg + ": repeat=" + repeat +
                 ", playback_rate=" + playback_rate);
     console.log("last_recorded_frame_index = " + last_recorded_frame_index);

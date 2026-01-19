@@ -39,7 +39,7 @@ if (isset($_REQUEST['address'])) {
 <script type="text/javascript" src="js/message-poller.js"></script>
 <script type="text/javascript" src="js/viewer-signaling.js"></script>
 <script type="text/javascript" src="js/video-capture.js"></script>
-<script type="text/javascript" src="js/circular-frame-buffer.js"></script>
+<script type="text/javascript" src="js/circular-frame-buffer.js?v=<?php echo time(); ?>"></script>
 <script type="text/javascript" src="js/video-device-picker.js"></script>
 <script type="text/javascript">
 
@@ -101,14 +101,35 @@ g_preempted = false;
 var g_remote_poller;
 var g_recorder;
 
+// Continue recording for this many milliseconds after trigger (configured in Race Coordinator)
+var g_record_after = <?php echo read_raceinfo('replay-record-after', '2000'); ?>;
+
+<?php
+// Calculate buffer size dynamically from skipback + record_after + padding
+$skipback = read_raceinfo('replay-skipback', '4000');
+$record_after = read_raceinfo('replay-record-after', '2000');
+// If skipback is 0 ("Entire race"), use 10 seconds as the skipback portion (covers DNF timeout)
+$effective_skipback = ($skipback == 0 || $skipback == '0') ? 10000 : intval($skipback);
+// Timeout should be long enough to cover entire race (10s covers DNF timeout)
+$race_timeout = 10000;
+// Add 2 seconds padding for server communication delays
+$buffer_size = $race_timeout + intval($record_after) + 2000;
+?>
 var g_replay_options = {
   count: 2,
   rate: 50,  // expressed as a percentage
-  length: 4000  // ms
+  // Buffer size calculated from: race_timeout + record_after + 2s padding
+  length: <?php echo $buffer_size; ?>,  // ms
+  skipback: <?php echo $effective_skipback; ?>,  // ms - how far back from trigger to start playback
+  race_timeout: <?php echo $race_timeout; ?>  // ms - how long to wait after RACE_STARTS before auto-triggering
 };
 
 function parse_replay_options(cmdline) {
-  g_replay_options.length = parseInt(cmdline.split(" ")[1]);
+  // Server sends skipback value in the message
+  g_replay_options.skipback = parseInt(cmdline.split(" ")[1]);
+  // Buffer size needs to accommodate race_timeout + record_after + padding
+  // (race_timeout is always used for the buffer, regardless of skipback setting)
+  g_replay_options.length = g_replay_options.race_timeout + g_record_after + 2000;
   if (g_recorder) {
     g_recorder.set_recording_length(g_replay_options.length);
   }
@@ -140,6 +161,8 @@ function handle_replay_message(cmdline) {
     parse_replay_options(cmdline);
     if (!g_preempted) {
       clearTimeout(g_replay_timeout);
+      g_replay_timeout = 0;
+      g_preempted = true;  // Mark that we've handled the replay, preventing RACE_STARTS timeout
       console.log('Triggering replay from REPLAY message', root);
       on_replay(root);
     }
@@ -149,13 +172,14 @@ function handle_replay_message(cmdline) {
     // This message signals that the start gate has actually opened (if that can
     // be detected).  The START message identifies what heat is queued next.
     parse_replay_options(cmdline);
+    // Use race_timeout (10s) to ensure we capture the entire race before auto-triggering
     g_replay_timeout = setTimeout(
       function() {
         g_preempted = true;
         console.log('Triggering replay from timeout after RACE_STARTS', root);
         on_replay(root);
       },
-      g_replay_options.length - g_replay_timeout_epsilon);
+      g_replay_options.race_timeout - g_replay_timeout_epsilon);
   } else {
     console.log("Unrecognized replay message: " + cmdline);
   }
@@ -296,15 +320,22 @@ function on_replay(root) {
   }
   g_replay_timeout = 0;
 
-  g_recorder.stop_recording();
+  // Continue recording for configured duration before stopping (configured in Race Coordinator)
+  var record_after = g_record_after;
 
-  var delay = $("#delay")[0].valueAsNumber * 1000;
-  if (delay > 0) {
-    setTimeout(function() { start_playback(root, upload); }, delay);
-  } else {
-    console.log('Direct playback');
-    start_playback(root, upload);
+  setTimeout(function() {
+    g_recorder.stop_recording();
+  }, record_after);
+
+  var delay_elem = $("#delay")[0];
+  var delay = delay_elem ? delay_elem.valueAsNumber * 1000 : 0;
+  if (isNaN(delay)) {
+    delay = 0;
   }
+
+  // Add recording duration to any configured delay to account for continued recording
+  var total_delay = delay + record_after;
+  setTimeout(function() { start_playback(root, upload); }, total_delay);
 }
 
 function start_playback(root, upload) {
@@ -320,6 +351,12 @@ function start_playback(root, upload) {
       // When the offscreen <canvas> is first created, we construct a
       // VideoCapture object to record its capture stream.  After the first play
       // through, stop the VideoCapture and upload the resulting Blob.
+
+      // Calculate the playback window duration
+      // We want to play from (trigger - skipback) to (trigger + record_after)
+      // Total duration = skipback + record_after
+      var adjusted_length = g_replay_options.skipback + g_record_after;
+
       g_recorder.playback(playback,
                           g_replay_options.count,
                           g_replay_options.rate,
@@ -344,7 +381,8 @@ function start_playback(root, upload) {
                             $("#playback-background").hide('slide');
                             announce_to_interior('replay-ended');
                             g_recorder.start_recording();
-                          });
+                          },
+                          adjusted_length);
     });
 }
 

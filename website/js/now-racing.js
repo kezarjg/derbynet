@@ -33,7 +33,7 @@ var Lineup = {
   // While hidden by a replay, don't advance the display.
   holding: false,
   hold: function() {
-    this.holding_display = true;
+    this.holding = true;
   },
   release: function() {
     this.holding = false;

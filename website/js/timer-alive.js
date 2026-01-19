@@ -23,7 +23,7 @@ function open_timer_window() {
     focus.postMessage({focus: true});
     focus.close();
   } else {
-    window.open('timer.php', 'timer3',
+    window.open('timer-test.php', 'timer3',
                 'menubar=off,toolbar=off,height=800,width=400,location=off');
   }
   return false;

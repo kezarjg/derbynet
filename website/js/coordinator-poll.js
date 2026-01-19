@@ -222,7 +222,7 @@ function inject_progress_text(control_group, round) {
 
 function generate_scheduling_control_group(round, current, timer_state) {
   var show_checkins = round.round == 1 && round.heats_scheduled == 0;
-  
+
   var control_group = $("<div class=\"control_group scheduling_control\"></div>")
       .attr('data-roundid', round.roundid)
       .appendTo("#" + round.category + "-group")
@@ -231,12 +231,12 @@ function generate_scheduling_control_group(round, current, timer_state) {
               .prepend("<img data-name=\"triangle\" src=\"img/triangle_east.png\"/>"))
       .append($('<div class="collapsible"/>')
               .append('<p>'
+                      + '<span data-name="roster_size"></span> racer(s)'
                       + (show_checkins
-                         ? '<span data-name="roster_size"></span> racer(s), '
-                         + '<span data-name="n_passed"></span> passed, ' 
+                         ? ', <span data-name="n_passed"></span> passed, '
                          + '<span data-name="scheduled"></span> in schedule.'
-                         + '<br/>'
-                         : '')
+                         : '.')
+                      + '<br/>'
                       + '<span data-name="n_heats_scheduled"></span> heats scheduled, '
                       + '<span data-name="n_heats_run"></span> run.'
                       + '</p>'))
@@ -567,6 +567,10 @@ function process_coordinator_poll_json(json) {
       $("<p></p>").text(concern).appendTo("#notifications");
     }
     $("#notifications").removeClass('hidden');
+  }
+
+  if (!json['current-heat']) {
+    return;
   }
 
   json['current-heat'].heat_results = [];
