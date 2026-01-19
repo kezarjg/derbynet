@@ -247,6 +247,7 @@ function TimerSimulator(options) {
   this.fetchRacers = function() {
     if (!self.pendingHeat) return;
 
+    self.log('Fetching racers...');
     $.ajax('poll.php', {
       type: 'GET',
       data: {
@@ -254,10 +255,11 @@ function TimerSimulator(options) {
       },
       dataType: 'json',
       success: function(data) {
-        if (data.racers) {
+        if (data.racers && data.racers.length > 0) {
           self.currentRacers = data.racers;
           // Build a map of lane -> car number
           let carNumbers = {};
+          let carNumList = [];
           for (let i = 0; i < data.racers.length; i++) {
             let racer = data.racers[i];
             carNumbers[racer.lane] = {
@@ -265,9 +267,12 @@ function TimerSimulator(options) {
               name: racer.name,
               carname: racer.carname
             };
+            carNumList.push('L' + racer.lane + ':' + racer.carnumber);
           }
-          self.log('Loaded ' + data.racers.length + ' racers for heat');
+          self.log('Loaded racers: ' + carNumList.join(', '));
           self.onRacersLoaded(carNumbers);
+        } else {
+          self.log('No racers returned for heat', 'error');
         }
       },
       error: function(xhr, status, error) {
