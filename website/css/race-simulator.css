@@ -1,0 +1,333 @@
+/* Race Simulator Styles */
+
+#simulator-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+#left-panel {
+  flex: 1;
+  min-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+#right-panel {
+  flex: 1;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+#track-container {
+  background: #1a1a2e;
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#track-canvas {
+  border-radius: 4px;
+}
+
+.panel {
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
+}
+
+.panel h3 {
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ddd;
+  font-size: 16px;
+  color: #333;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Feature Toggle Switch */
+.feature-toggle {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 20px;
+  margin-left: 10px;
+  flex-shrink: 0;
+}
+
+.feature-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: 0.3s;
+  border-radius: 20px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+.feature-toggle input:checked + .toggle-slider {
+  background-color: #2ecc71;
+}
+
+.feature-toggle input:checked + .toggle-slider:before {
+  transform: translateX(20px);
+}
+
+.panel.disabled {
+  opacity: 0.5;
+}
+
+.panel.disabled .status-row {
+  color: #999;
+}
+
+/* Settings Panel */
+#settings-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+#settings-panel h3 {
+  grid-column: 1 / -1;
+}
+
+.setting-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.setting-row label {
+  font-size: 13px;
+  color: #555;
+}
+
+.setting-row select,
+.setting-row input[type="number"] {
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.setting-row input[type="checkbox"] {
+  margin-right: 6px;
+}
+
+/* Controls Panel */
+#control-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.control-btn {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s, opacity 0.2s;
+}
+
+.control-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.control-btn.primary {
+  background: #2ecc71;
+  color: white;
+}
+
+.control-btn.primary:hover:not(:disabled) {
+  background: #27ae60;
+}
+
+.control-btn:not(.primary) {
+  background: #3498db;
+  color: white;
+}
+
+.control-btn:not(.primary):hover:not(:disabled) {
+  background: #2980b9;
+}
+
+#inject-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.inject-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #e74c3c;
+  border-radius: 4px;
+  background: white;
+  color: #e74c3c;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.inject-btn:hover {
+  background: #e74c3c;
+  color: white;
+}
+
+/* Status Panels */
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 14px;
+}
+
+.status-label {
+  color: #666;
+}
+
+.status-value {
+  font-weight: 500;
+  color: #333;
+}
+
+.status-value.connected {
+  color: #2ecc71;
+}
+
+.status-value.disconnected {
+  color: #e74c3c;
+}
+
+.status-value.racing {
+  color: #f39c12;
+}
+
+.status-value.ready {
+  color: #3498db;
+}
+
+.status-value.disabled {
+  color: #999;
+}
+
+/* Event Log */
+#event-log-panel {
+  margin: 0 20px 20px 20px;
+  max-width: 1160px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+#event-log {
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 12px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px;
+}
+
+#event-log .log-entry {
+  padding: 2px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+#event-log .log-entry:last-child {
+  border-bottom: none;
+}
+
+#event-log .log-time {
+  color: #888;
+  margin-right: 8px;
+}
+
+#event-log .log-type {
+  font-weight: 500;
+  margin-right: 8px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+#event-log .log-type.timer {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+#event-log .log-type.camera {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+#event-log .log-type.race {
+  background: #fff3e0;
+  color: #ef6c00;
+}
+
+#event-log .log-type.error {
+  background: #ffebee;
+  color: #c62828;
+}
+
+#event-log .log-message {
+  color: #333;
+}
+
+/* Hidden debug log */
+#log.hidden {
+  display: none;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  #simulator-container {
+    flex-direction: column;
+  }
+
+  #left-panel,
+  #right-panel {
+    min-width: auto;
+  }
+
+  #settings-panel {
+    grid-template-columns: 1fr;
+  }
+}
