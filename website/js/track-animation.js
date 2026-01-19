@@ -48,6 +48,7 @@ function TrackAnimation(canvas, options) {
   // Phase tracking: 'idle', 'staging', 'racing', 'finished'
   this.phase = 'idle';
   this.phaseStartTime = null;  // When current sequence (staging) started
+  this.finalDisplayTime = 0;   // Frozen time to display after sequence ends
 
   // Initialize cars
   this.initCars = function() {
@@ -128,12 +129,23 @@ function TrackAnimation(canvas, options) {
     self.elapsedDisplay = 0;
     self.phase = 'idle';
     self.phaseStartTime = null;
+    self.finalDisplayTime = 0;
     for (let i = 0; i < self.cars.length; i++) {
       self.cars[i].progress = 0;
       self.cars[i].dnf = false;
       self.cars[i].finished = false;
       self.cars[i].time = null;
     }
+    self.draw();
+  };
+
+  // End the race sequence (freeze timer display)
+  this.endSequence = function() {
+    if (self.phaseStartTime) {
+      self.finalDisplayTime = (performance.now() - self.phaseStartTime) / 1000;
+    }
+    self.phase = 'idle';
+    self.phaseStartTime = null;
     self.draw();
   };
 
@@ -326,7 +338,7 @@ function TrackAnimation(canvas, options) {
     }
 
     // Calculate elapsed time from phase start (continuous timer)
-    let displayTime = self.elapsedDisplay;
+    let displayTime = self.finalDisplayTime;
     if (self.phaseStartTime) {
       displayTime = (performance.now() - self.phaseStartTime) / 1000;
     }

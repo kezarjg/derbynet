@@ -277,17 +277,25 @@ $(function() {
       stats.races++;
       updateStats();
 
-      // If auto mode, schedule next race
-      if (autoMode && running) {
-        raceTimeout = setTimeout(function() {
-          if (running) {
-            // If timer disabled, always run next race; if enabled, need pending heat
-            if (!timerEnabled || timer.pendingHeat) {
-              runRace();
-            }
+      // Schedule post-delay, then either next race (auto mode) or end sequence
+      raceTimeout = setTimeout(function() {
+        if (autoMode && running) {
+          // If timer disabled, always run next race; if enabled, need pending heat
+          if (!timerEnabled || timer.pendingHeat) {
+            // Start staging for next race
+            track.startStaging();
+            raceTimeout = setTimeout(function() {
+              if (running) runRace();
+            }, settings.preDelay);
+          } else {
+            // No next heat ready, end the sequence
+            track.endSequence();
           }
-        }, settings.postDelay);
-      }
+        } else {
+          // Single race mode - end the sequence
+          track.endSequence();
+        }
+      }, settings.postDelay);
     }, maxTime * 1000 + 100); // Add small buffer
   }
 
@@ -522,7 +530,12 @@ $(function() {
       log('No heat ready for single race', 'error');
       return;
     }
-    runRace();
+    // Start staging phase, then race after pre-delay
+    let settings = getSettings();
+    track.startStaging();
+    raceTimeout = setTimeout(function() {
+      runRace();
+    }, settings.preDelay);
   });
 
   $('#inject-dnf-btn').on('click', function() {
