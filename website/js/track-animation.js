@@ -229,8 +229,8 @@ function TrackAnimation(canvas, options) {
 
     self.draw();
 
-    // Continue animation until all cars finished plus 1 second
-    if (!allFinished || elapsed < maxTime + 1) {
+    // Continue animation until all cars finished
+    if (!allFinished) {
       requestAnimationFrame(self.animate.bind(self));
     } else {
       self.animating = false;
