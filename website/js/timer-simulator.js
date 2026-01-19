@@ -248,10 +248,10 @@ function TimerSimulator(options) {
     if (!self.pendingHeat) return;
 
     self.log('Fetching racers...');
-    $.ajax('poll.php', {
+    $.ajax('action.php', {
       type: 'GET',
       data: {
-        query: 'racers'
+        query: 'poll.coordinator'
       },
       dataType: 'json',
       success: function(data) {
