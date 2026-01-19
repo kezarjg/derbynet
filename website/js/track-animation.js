@@ -16,8 +16,8 @@ function TrackAnimation(canvas, options) {
   // Track dimensions
   this.trackPadding = 20;
   this.laneWidth = 60;
-  this.trackLength = canvas.height - 80; // Leave room for start/finish
-  this.startY = 40;
+  this.trackLength = canvas.height - 100; // Leave room for start/finish
+  this.startY = 60;  // Space for timer and status text
   this.finishY = this.startY + this.trackLength - 45;
 
   // Car dimensions
@@ -44,6 +44,10 @@ function TrackAnimation(canvas, options) {
   this.gateOpen = false;
   this.raceComplete = false;
   this.elapsedDisplay = 0;
+
+  // Phase tracking: 'idle', 'staging', 'racing', 'finished'
+  this.phase = 'idle';
+  this.phaseStartTime = null;  // When current sequence (staging) started
 
   // Initialize cars
   this.initCars = function() {
@@ -110,7 +114,7 @@ function TrackAnimation(canvas, options) {
   this.updateDimensions = function() {
     let totalWidth = self.laneCount * self.laneWidth + self.trackPadding * 2;
     self.canvas.width = Math.max(400, totalWidth);
-    self.trackLength = self.canvas.height - 80;
+    self.trackLength = self.canvas.height - 100;
     self.finishY = self.startY + self.trackLength - 45;
   };
 
@@ -122,11 +126,27 @@ function TrackAnimation(canvas, options) {
     self.gateOpen = false;
     self.raceComplete = false;
     self.elapsedDisplay = 0;
+    self.phase = 'idle';
+    self.phaseStartTime = null;
     for (let i = 0; i < self.cars.length; i++) {
       self.cars[i].progress = 0;
       self.cars[i].dnf = false;
       self.cars[i].finished = false;
       self.cars[i].time = null;
+    }
+    self.draw();
+  };
+
+  // Start staging phase (timer starts running)
+  this.startStaging = function() {
+    self.phase = 'staging';
+    self.phaseStartTime = performance.now();
+    self.gateOpen = false;
+    self.raceComplete = false;
+    self.elapsedDisplay = 0;
+    for (let i = 0; i < self.cars.length; i++) {
+      self.cars[i].progress = 0;
+      self.cars[i].finished = false;
     }
     self.draw();
   };
@@ -138,6 +158,12 @@ function TrackAnimation(canvas, options) {
     self.raceStartTime = performance.now();
     self.gateOpen = true;
     self.raceComplete = false;
+    self.phase = 'racing';
+
+    // If staging wasn't started, start the global timer now
+    if (!self.phaseStartTime) {
+      self.phaseStartTime = performance.now();
+    }
 
     // Set up car states for race
     for (let i = 0; i < self.cars.length; i++) {
@@ -197,6 +223,7 @@ function TrackAnimation(canvas, options) {
     } else {
       self.animating = false;
       self.raceComplete = true;
+      self.phase = 'finished';
       self.draw();
     }
   };
@@ -298,23 +325,32 @@ function TrackAnimation(canvas, options) {
       self.drawCar(i, startX);
     }
 
+    // Calculate elapsed time from phase start (continuous timer)
+    let displayTime = self.elapsedDisplay;
+    if (self.phaseStartTime) {
+      displayTime = (performance.now() - self.phaseStartTime) / 1000;
+    }
+
     // Draw elapsed time
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 24px monospace';
     ctx.textAlign = 'right';
-    ctx.fillText(self.elapsedDisplay.toFixed(3) + 's', width - 15, 30);
+    ctx.fillText(displayTime.toFixed(3) + 's', width - 15, 30);
 
-    // Draw race status
+    // Draw race status based on phase
     ctx.textAlign = 'left';
     ctx.font = '14px sans-serif';
-    let status = 'STAGING';
+    let status = 'READY';
     let statusColor = '#888';
-    if (self.gateOpen && !self.raceComplete) {
+    if (self.phase === 'staging') {
+      status = 'STAGING';
+      statusColor = '#3498db';  // Blue
+    } else if (self.phase === 'racing') {
       status = 'RACING';
-      statusColor = '#f1c40f';
-    } else if (self.raceComplete) {
+      statusColor = '#f1c40f';  // Yellow
+    } else if (self.phase === 'finished') {
       status = 'FINISHED';
-      statusColor = '#2ecc71';
+      statusColor = '#2ecc71';  // Green
     }
     ctx.fillStyle = statusColor;
     ctx.fillText(status, 15, 30);
@@ -361,11 +397,18 @@ function TrackAnimation(canvas, options) {
 
     // Draw car number on the car body
     if (car.carnumber !== null && car.active) {
-      ctx.fillStyle = '#fff';
       ctx.font = 'bold 12px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(car.carnumber, x + self.carWidth / 2, y + self.carHeight / 2 + 3);
+      let numX = x + self.carWidth / 2;
+      let numY = y + self.carHeight / 2 + 4;
+      // Draw outline for readability
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 3;
+      ctx.strokeText(car.carnumber, numX, numY);
+      // Draw white fill
+      ctx.fillStyle = '#fff';
+      ctx.fillText(car.carnumber, numX, numY);
       ctx.textBaseline = 'alphabetic';
     }
 

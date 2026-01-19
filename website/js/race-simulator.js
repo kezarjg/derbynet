@@ -353,15 +353,17 @@ $(function() {
       if (!timer.connected) {
         timer.connect();
       } else if (timer.pendingHeat) {
-        // Start racing after pre-delay
+        // Start staging phase and race after pre-delay
         let settings = getSettings();
+        track.startStaging();
         raceTimeout = setTimeout(function() {
           if (running) runRace();
         }, settings.preDelay);
       }
     } else {
-      // Timer disabled - start racing immediately after pre-delay
+      // Timer disabled - start staging and race after pre-delay
       let settings = getSettings();
+      track.startStaging();
       raceTimeout = setTimeout(function() {
         if (running) runRace();
       }, settings.preDelay);
@@ -453,8 +455,9 @@ $(function() {
         updateTimerStatus(state);
 
         if (state === 'ready' && autoMode && running) {
-          // Heat ready, start race after delay
+          // Heat ready, start staging and race after delay
           let s = getSettings();
+          track.startStaging();
           raceTimeout = setTimeout(function() {
             if (running && timer.pendingHeat) {
               runRace();

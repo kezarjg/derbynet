@@ -88,6 +88,9 @@ var g_reverse_lanes = <?php echo $reverse_lanes ? 'true' : 'false'; ?>;
           <option value="3" selected>3 sec</option>
           <option value="5">5 sec</option>
           <option value="10">10 sec</option>
+          <option value="15">15 sec</option>
+          <option value="20">20 sec</option>
+          <option value="30">30 sec</option>
         </select>
       </div>
       <div class="setting-row">
@@ -97,6 +100,9 @@ var g_reverse_lanes = <?php echo $reverse_lanes ? 'true' : 'false'; ?>;
           <option value="3">3 sec</option>
           <option value="5" selected>5 sec</option>
           <option value="10">10 sec</option>
+          <option value="15">15 sec</option>
+          <option value="20">20 sec</option>
+          <option value="30">30 sec</option>
         </select>
       </div>
       <div class="setting-row">
