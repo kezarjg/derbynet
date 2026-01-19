@@ -1,0 +1,485 @@
+'use strict';
+
+// TrackAnimation handles the canvas-based track visualization
+function TrackAnimation(canvas, options) {
+  let self = this;
+
+  // Canvas setup
+  this.canvas = canvas;
+  this.ctx = canvas.getContext('2d');
+
+  // Configuration
+  this.laneCount = options.laneCount || 4;
+  this.laneMask = options.laneMask || 0xFF;
+  this.reverseLanes = options.reverseLanes || false;
+  this.postRaceDelay = options.postRaceDelay || 5000; // Post-race delay in ms (default 5 seconds)
+
+  // Callbacks
+  this.onLaneFinish = options.onLaneFinish || function() {};  // Called when a car crosses finish line
+  this.onRaceStart = options.onRaceStart || function() {};    // Called when gate opens
+  this.onAllFinished = options.onAllFinished || function() {}; // Called when post-race delay completes
+
+  // Track dimensions
+  this.trackPadding = 20;
+  this.laneWidth = 60;
+  this.trackLength = canvas.height - 100; // Leave room for start/finish
+  this.startY = 60;  // Space for timer and status text
+  this.finishY = this.startY + this.trackLength - 45;
+
+  // Car dimensions
+  this.carWidth = 40;
+  this.carHeight = 25;
+
+  // Lane colors
+  this.laneColors = [
+    '#e74c3c', // Red
+    '#3498db', // Blue
+    '#2ecc71', // Green
+    '#f1c40f', // Yellow
+    '#9b59b6', // Purple
+    '#e67e22', // Orange
+    '#1abc9c', // Teal
+    '#34495e'  // Dark gray
+  ];
+
+  // State
+  this.cars = [];
+  this.raceStartTime = null;
+  this.finishTimes = null;
+  this.animating = false;
+  this.gateOpen = false;
+  this.raceComplete = false;
+  this.elapsedDisplay = 0;
+
+  // Phase tracking: 'idle', 'staging', 'racing', 'finished'
+  this.phase = 'idle';
+  this.phaseStartTime = null;  // When current sequence (staging) started
+  this.finalDisplayTime = 0;   // Frozen time to display after sequence ends
+  this.finishedPhaseStartTime = null;  // When finished phase started
+  this.postRaceTimeoutId = null;  // Timeout for post-race delay
+
+  // Initialize cars
+  this.initCars = function() {
+    self.cars = [];
+    for (let i = 0; i < self.laneCount; i++) {
+      self.cars.push({
+        lane: i,
+        progress: 0, // 0 = start, 1 = finish
+        color: self.laneColors[i % self.laneColors.length],
+        active: (self.laneMask & (1 << i)) !== 0,
+        dnf: false,
+        dnfPosition: 0.3 + Math.random() * 0.4, // Random DNF stop point
+        finished: false,
+        time: null,
+        carnumber: null,  // Car number to display
+        racerName: null   // Racer name (for tooltip/display)
+      });
+    }
+  };
+
+  // Set car numbers for each lane
+  // carNumbers: object mapping lane (1-indexed) to {carnumber, name, carname}
+  // Note: When lanes are reversed, visual lane 0 corresponds to RaceChart lane N
+  this.setCarNumbers = function(carNumbers) {
+    for (let i = 0; i < self.cars.length; i++) {
+      // Map visual lane index to RaceChart lane number
+      let raceChartLane;
+      if (self.reverseLanes) {
+        // Visual lane 0 = RaceChart lane N, visual lane 1 = RaceChart lane N-1, etc.
+        raceChartLane = self.laneCount - i;
+      } else {
+        raceChartLane = i + 1;  // Lanes are 1-indexed
+      }
+
+      if (carNumbers[raceChartLane]) {
+        self.cars[i].carnumber = carNumbers[raceChartLane].carnumber;
+        self.cars[i].racerName = carNumbers[raceChartLane].name;
+      } else {
+        self.cars[i].carnumber = null;
+        self.cars[i].racerName = null;
+      }
+    }
+    self.draw();
+  };
+
+  // Update lane count
+  this.setLaneCount = function(count) {
+    self.laneCount = count;
+    self.updateDimensions();
+    self.initCars();
+    self.draw();
+  };
+
+  // Update lane mask
+  this.setLaneMask = function(mask) {
+    self.laneMask = mask;
+    for (let i = 0; i < self.cars.length; i++) {
+      self.cars[i].active = (mask & (1 << i)) !== 0;
+    }
+    self.draw();
+  };
+
+  // Update post-race delay
+  this.setPostRaceDelay = function(delayMs) {
+    self.postRaceDelay = delayMs;
+  };
+
+  // Update dimensions based on lane count
+  this.updateDimensions = function() {
+    let totalWidth = self.laneCount * self.laneWidth + self.trackPadding * 2;
+    self.canvas.width = Math.max(400, totalWidth);
+    self.trackLength = self.canvas.height - 100;
+    self.finishY = self.startY + self.trackLength - 45;
+  };
+
+  // Reset to starting position
+  this.reset = function() {
+    // Clear any pending post-race timeout
+    if (self.postRaceTimeoutId) {
+      clearTimeout(self.postRaceTimeoutId);
+      self.postRaceTimeoutId = null;
+    }
+
+    self.raceStartTime = null;
+    self.finishTimes = null;
+    self.animating = false;
+    self.gateOpen = false;
+    self.raceComplete = false;
+    self.elapsedDisplay = 0;
+    self.phase = 'idle';
+    self.phaseStartTime = null;
+    self.finalDisplayTime = 0;
+    self.finishedPhaseStartTime = null;
+    for (let i = 0; i < self.cars.length; i++) {
+      self.cars[i].progress = 0;
+      self.cars[i].dnf = false;
+      self.cars[i].finished = false;
+      self.cars[i].time = null;
+    }
+    self.draw();
+  };
+
+  // End the race sequence (freeze timer display)
+  this.endSequence = function() {
+    if (self.phaseStartTime) {
+      self.finalDisplayTime = (performance.now() - self.phaseStartTime) / 1000;
+    }
+    self.phase = 'idle';
+    self.phaseStartTime = null;
+    self.draw();
+  };
+
+  // Start staging phase (timer starts running)
+  // This resets cars to start position for the next race
+  this.startStaging = function() {
+    self.phase = 'staging';
+    self.phaseStartTime = performance.now();
+    self.gateOpen = false;
+    self.raceComplete = false;
+    self.elapsedDisplay = 0;
+    // Reset cars to starting position
+    for (let i = 0; i < self.cars.length; i++) {
+      self.cars[i].progress = 0;
+      self.cars[i].finished = false;
+    }
+    self.draw();
+  };
+
+  // Start race with given finish times
+  // finishTimes: array of times in seconds (null for DNF)
+  this.startRace = function(finishTimes) {
+    self.finishTimes = finishTimes;
+    self.raceStartTime = performance.now();
+    self.gateOpen = true;
+    self.raceComplete = false;
+    self.phase = 'racing';
+
+    // If staging wasn't started, start the global timer now
+    if (!self.phaseStartTime) {
+      self.phaseStartTime = performance.now();
+    }
+
+    // Set up car states for race
+    for (let i = 0; i < self.cars.length; i++) {
+      self.cars[i].progress = 0;
+      self.cars[i].finished = false;
+      self.cars[i].dnf = finishTimes[i] === null;
+      self.cars[i].time = finishTimes[i];
+    }
+
+    self.animating = true;
+
+    // Notify that race has started (gate opened)
+    self.onRaceStart();
+
+    requestAnimationFrame(self.animate.bind(self));
+  };
+
+  // Animation loop
+  this.animate = function(timestamp) {
+    if (!self.animating) return;
+
+    let elapsed = (timestamp - self.raceStartTime) / 1000;
+    self.elapsedDisplay = elapsed;
+
+    let allFinished = true;
+    let maxTime = 0;
+
+    for (let i = 0; i < self.cars.length; i++) {
+      let car = self.cars[i];
+      if (!car.active) continue;
+
+      if (car.dnf) {
+        // DNF: animate to random stop position then stop
+        // DNF cars do NOT report to the timer - they wait for timeout
+        let dnfTime = car.dnfPosition * 5; // DNF happens over ~2.5 seconds
+        car.progress = Math.min(car.dnfPosition, elapsed / dnfTime * car.dnfPosition);
+        if (car.progress < car.dnfPosition) {
+          allFinished = false;
+        }
+      } else {
+        let finishTime = self.finishTimes[i];
+        maxTime = Math.max(maxTime, finishTime);
+
+        // Progress = elapsed / finishTime (0 to 1)
+        car.progress = Math.min(1, elapsed / finishTime);
+
+        if (car.progress >= 1 && !car.finished) {
+          car.finished = true;
+          // Notify that this lane has crossed the finish line
+          // Pass the visual lane index and the finish time
+          self.onLaneFinish(i, finishTime);
+        }
+
+        if (car.progress < 1) {
+          allFinished = false;
+        }
+      }
+    }
+
+    self.draw();
+
+    // Continue animation until all cars finished (or DNF cars have stopped)
+    if (!allFinished) {
+      requestAnimationFrame(self.animate.bind(self));
+    } else {
+      // All cars have finished moving - enter finished phase
+      self.animating = false;
+      self.raceComplete = true;
+      self.phase = 'finished';
+      self.finishedPhaseStartTime = performance.now();
+      self.draw();
+
+      // Wait for post-race delay before calling onAllFinished
+      // This simulates cars sitting on finish line until crew picks them up
+      self.postRaceTimeoutId = setTimeout(function() {
+        self.postRaceTimeoutId = null;
+        // Notify that post-race delay has completed
+        self.onAllFinished();
+      }, self.postRaceDelay);
+    }
+  };
+
+  // Get stream from canvas
+  this.getStream = function(fps) {
+    return self.canvas.captureStream(fps || 30);
+  };
+
+  // Start continuous render loop for streaming
+  // captureStream needs continuous drawing to produce frames
+  this.renderLoopRunning = false;
+  this.startRenderLoop = function() {
+    if (self.renderLoopRunning) return;
+    self.renderLoopRunning = true;
+
+    function renderFrame() {
+      if (!self.renderLoopRunning) return;
+
+      // Only draw if not in race animation (race animation handles its own drawing)
+      if (!self.animating) {
+        self.draw();
+      }
+
+      requestAnimationFrame(renderFrame);
+    }
+
+    requestAnimationFrame(renderFrame);
+  };
+
+  this.stopRenderLoop = function() {
+    self.renderLoopRunning = false;
+  };
+
+  // Draw the track and cars
+  this.draw = function() {
+    let ctx = self.ctx;
+    let width = self.canvas.width;
+    let height = self.canvas.height;
+
+    // Clear canvas
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, width, height);
+
+    // Calculate lane positions
+    let totalLaneWidth = self.laneCount * self.laneWidth;
+    let startX = (width - totalLaneWidth) / 2;
+
+    // Draw track surface
+    ctx.fillStyle = '#2d2d44';
+    ctx.fillRect(startX - 10, self.startY - 10, totalLaneWidth + 20, self.trackLength + 20);
+
+    // Draw lane dividers
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 10]);
+    for (let i = 0; i <= self.laneCount; i++) {
+      let x = startX + i * self.laneWidth;
+      ctx.beginPath();
+      ctx.moveTo(x, self.startY);
+      ctx.lineTo(x, self.finishY);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // Draw start gate
+    ctx.fillStyle = self.gateOpen ? '#2ecc71' : '#e74c3c';
+    ctx.fillRect(startX - 10, self.startY - 8, totalLaneWidth + 20, 6);
+
+    // Draw finish line
+    ctx.fillStyle = '#fff';
+    for (let i = 0; i < totalLaneWidth + 20; i += 10) {
+      if ((i / 10) % 2 === 0) {
+        ctx.fillRect(startX - 10 + i, self.finishY, 10, 6);
+      }
+    }
+
+    // Draw start line text
+    ctx.fillStyle = '#888';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('START', width / 2, self.startY - 15);
+
+    // Draw finish line text
+    ctx.fillText('FINISH', width / 2, self.finishY - 10);
+
+    // Draw lane numbers
+    ctx.fillStyle = '#666';
+    ctx.font = '14px sans-serif';
+    for (let i = 0; i < self.laneCount; i++) {
+      let x = startX + i * self.laneWidth + self.laneWidth / 2;
+      // When reversed, visual lane 0 = lane N, visual lane 1 = lane N-1, etc.
+      let laneNum = self.reverseLanes ? (self.laneCount - i) : (i + 1);
+      ctx.fillText(laneNum.toString(), x, height - 10);
+    }
+
+    // Draw cars
+    for (let i = 0; i < self.cars.length; i++) {
+      self.drawCar(i, startX);
+    }
+
+    // Calculate elapsed time from phase start (continuous timer)
+    let displayTime = self.finalDisplayTime;
+    if (self.phaseStartTime) {
+      displayTime = (performance.now() - self.phaseStartTime) / 1000;
+    }
+
+    // Draw elapsed time
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 24px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(displayTime.toFixed(3) + 's', width - 15, 30);
+
+    // Draw race status based on phase
+    ctx.textAlign = 'left';
+    ctx.font = '14px sans-serif';
+    let status = 'READY';
+    let statusColor = '#888';
+    if (self.phase === 'staging') {
+      status = 'STAGING';
+      statusColor = '#3498db';  // Blue
+    } else if (self.phase === 'racing') {
+      status = 'RACING';
+      statusColor = '#f1c40f';  // Yellow
+    } else if (self.phase === 'finished') {
+      status = 'FINISHED';
+      statusColor = '#2ecc71';  // Green
+    }
+    ctx.fillStyle = statusColor;
+    ctx.fillText(status, 15, 30);
+  };
+
+  // Draw a single car
+  this.drawCar = function(index, startX) {
+    let car = self.cars[index];
+    let ctx = self.ctx;
+
+    let x = startX + index * self.laneWidth + (self.laneWidth - self.carWidth) / 2;
+    let yStart = self.startY + 10;
+    let yRange = self.trackLength - self.carHeight - 20;
+    let y = yStart + car.progress * yRange;
+
+    // Car body
+    if (!car.active) {
+      ctx.fillStyle = '#333';
+      ctx.globalAlpha = 0.3;
+    } else if (car.dnf && car.progress >= car.dnfPosition - 0.01) {
+      ctx.fillStyle = '#666';
+      ctx.globalAlpha = 0.7;
+    } else {
+      ctx.fillStyle = car.color;
+      ctx.globalAlpha = 1;
+    }
+
+    // Draw car shape (simplified race car)
+    ctx.beginPath();
+    ctx.moveTo(x + 5, y + self.carHeight);
+    ctx.lineTo(x, y + self.carHeight - 5);
+    ctx.lineTo(x, y + 8);
+    ctx.lineTo(x + 5, y);
+    ctx.lineTo(x + self.carWidth - 5, y);
+    ctx.lineTo(x + self.carWidth, y + 8);
+    ctx.lineTo(x + self.carWidth, y + self.carHeight - 5);
+    ctx.lineTo(x + self.carWidth - 5, y + self.carHeight);
+    ctx.closePath();
+    ctx.fill();
+
+    // Windshield
+    ctx.fillStyle = '#222';
+    ctx.fillRect(x + 8, y + 5, self.carWidth - 16, 8);
+
+    // Draw car number on the car body (below the windshield)
+    if (car.carnumber !== null && car.active) {
+      ctx.globalAlpha = 1;  // Ensure full opacity for car number
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(car.carnumber, x + self.carWidth / 2, y + self.carHeight - 5);
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    // Reset alpha
+    ctx.globalAlpha = 1;
+
+    // Draw time for finished cars
+    if (car.finished && car.time !== null) {
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(car.time.toFixed(3), x + self.carWidth / 2, y + self.carHeight + 14);
+    }
+
+    // Draw DNF label
+    if (car.dnf && car.progress >= car.dnfPosition - 0.01) {
+      ctx.fillStyle = '#e74c3c';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('DNF', x + self.carWidth / 2, y + self.carHeight + 14);
+    }
+  };
+
+  // Initialize
+  this.updateDimensions();
+  this.initCars();
+  this.draw();
+}
