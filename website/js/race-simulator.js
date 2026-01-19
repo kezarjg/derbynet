@@ -15,6 +15,10 @@ $(function() {
   let timerEnabled = true;
   let cameraEnabled = true;
 
+  // Pending updates for next heat (applied during staging)
+  let pendingLaneMask = null;
+  let pendingCarNumbers = null;
+
   // Injection flags (one-shot)
   let injectDnfNext = false;
   let injectAnomalyNext = false;
@@ -287,6 +291,16 @@ $(function() {
     if (autoMode && running) {
       // If timer disabled, always run next race; if enabled, need pending heat
       if (!timerEnabled || timer.pendingHeat) {
+        // Apply pending updates before staging (car numbers and lane mask for next heat)
+        if (pendingLaneMask !== null) {
+          track.setLaneMask(pendingLaneMask);
+          pendingLaneMask = null;
+        }
+        if (pendingCarNumbers !== null) {
+          track.setCarNumbers(pendingCarNumbers);
+          pendingCarNumbers = null;
+        }
+
         // Start staging for next race
         track.startStaging();
         raceTimeout = setTimeout(function() {
@@ -364,6 +378,16 @@ $(function() {
       if (!timer.connected) {
         timer.connect();
       } else if (timer.pendingHeat) {
+        // Apply pending updates before staging
+        if (pendingLaneMask !== null) {
+          track.setLaneMask(pendingLaneMask);
+          pendingLaneMask = null;
+        }
+        if (pendingCarNumbers !== null) {
+          track.setCarNumbers(pendingCarNumbers);
+          pendingCarNumbers = null;
+        }
+
         // Start staging phase and race after pre-delay
         let settings = getSettings();
         track.startStaging();
@@ -516,13 +540,12 @@ $(function() {
       },
       onHeatReady: function(heat) {
         updateHeatInfo(heat);
-        // Update track's lane mask for visual display (synced with timer.currentLaneMask)
-        track.setLaneMask(heat.laneMask);
-        // Don't reset here - let the race cycle handle it
-        // Resetting here would interrupt the post-race delay visualization
+        // Store lane mask for next staging phase - don't update during post-race delay
+        pendingLaneMask = heat.laneMask;
       },
       onRacersLoaded: function(carNumbers) {
-        track.setCarNumbers(carNumbers);
+        // Store car numbers for next staging phase - don't update during post-race delay
+        pendingCarNumbers = carNumbers;
       },
       onAbort: function() {
         if (raceTimeout) {
@@ -580,6 +603,17 @@ $(function() {
       log('No heat ready for single race', 'error');
       return;
     }
+
+    // Apply pending updates before staging
+    if (pendingLaneMask !== null) {
+      track.setLaneMask(pendingLaneMask);
+      pendingLaneMask = null;
+    }
+    if (pendingCarNumbers !== null) {
+      track.setCarNumbers(pendingCarNumbers);
+      pendingCarNumbers = null;
+    }
+
     // Start staging phase, then race after pre-delay
     let settings = getSettings();
     track.startStaging();
