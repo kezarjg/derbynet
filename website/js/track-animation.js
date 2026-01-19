@@ -139,11 +139,11 @@ function TrackAnimation(canvas, options) {
     self.gateOpen = true;
     self.raceComplete = false;
 
-    // Set up DNF status
+    // Set up car states for race
     for (let i = 0; i < self.cars.length; i++) {
-      if (finishTimes[i] === null) {
-        self.cars[i].dnf = true;
-      }
+      self.cars[i].progress = 0;
+      self.cars[i].finished = false;
+      self.cars[i].dnf = finishTimes[i] === null;
       self.cars[i].time = finishTimes[i];
     }
 
@@ -281,7 +281,7 @@ function TrackAnimation(canvas, options) {
     ctx.fillText('START', width / 2, self.startY - 15);
 
     // Draw finish line text
-    ctx.fillText('FINISH', width / 2, self.finishY + 20);
+    ctx.fillText('FINISH', width / 2, self.finishY - 10);
 
     // Draw lane numbers
     ctx.fillStyle = '#666';
