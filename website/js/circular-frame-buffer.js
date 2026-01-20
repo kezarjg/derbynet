@@ -7,9 +7,7 @@
 //
 // This file is kept for backward compatibility and testing purposes.
 //
-// Version: 1.0 - ImageData frames (deprecated)
 function CircularFrameBuffer(stream, length_ms) {
-  console.log('CFB v1.0 (DEPRECATED): ImageData mode, length_ms =', length_ms);
   // We expect a video refresh rate of 60 frames per second
   const k_refresh_fps = 60;
   let debugging = false;

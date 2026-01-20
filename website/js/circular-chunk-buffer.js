@@ -4,9 +4,7 @@
 // Instead of storing uncompressed ImageData frames (~2GB for 4s), this stores
 // compressed video chunks (~2-8MB for 4s), reducing memory by 250-1000x.
 //
-// Version: 2.0 - Continuous recording (2026-01-20)
 function CircularChunkBuffer(stream, length_ms) {
-  console.log('CCB v2.0: Continuous recording mode, length_ms =', length_ms);
 
   let this_ccb = this;
   let now_msg = (new Date()).toTimeString().split(" ", 1)[0];
