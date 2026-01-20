@@ -8,81 +8,36 @@
 // they exceed the configured buffer duration (length_ms).
 //
 function CircularChunkBuffer(stream, length_ms) {
-
   let this_ccb = this;
-  let now_msg = (new Date()).toTimeString().split(" ", 1)[0];
+  let resizing_callback = null;
 
-  let resizing_callback = false;
   this.on_resize = function(cb) { resizing_callback = cb; }
-
-  // Takes effect for the next recording, not the current one
   this.set_recording_length = function(number_of_milliseconds) {
     length_ms = number_of_milliseconds;
   }
 
-  // Get stream dimensions
+  // Get stream dimensions (may be undefined for remote streams initially)
   let stream_settings = stream.getVideoTracks()[0].getSettings();
   let stream_width = stream_settings.width || 1280;
   let stream_height = stream_settings.height || 720;
-
-  // For remote streams, dimensions may not be available immediately
-  // We'll update them when we get actual video frames
-  let dimensions_updated = (stream_settings.width && stream_settings.height) ? true : false;
-
-  if (dimensions_updated) {
-    console.log('CircularChunkBuffer: stream dimensions ' + stream_width + 'x' + stream_height);
-  } else {
-    console.log('CircularChunkBuffer: stream dimensions not yet available, using defaults ' +
-                stream_width + 'x' + stream_height);
-  }
-
-  // Monitor for stream dimension changes
-  stream.getVideoTracks()[0].addEventListener('ended', function() {
-    console.log('CCB: stream track ended');
-  });
+  let dimensions_updated = !!(stream_settings.width && stream_settings.height);
 
   // Circular buffer for compressed video chunks
   let chunks = [];
   let chunk_times = [];
-  let recording = false;
   let recorder = null;
-  let recording_start_time = 0;
 
-  // MediaRecorder configuration
-  // Try to find the best supported codec
-  let mimeType = null;
-  let codecs_to_try = [
-    'video/webm;codecs=vp9',
-    'video/webm;codecs=vp8',
-    'video/webm;codecs=h264',
-    'video/webm',
-    'video/mp4'
-  ];
-
-  for (let codec of codecs_to_try) {
-    if (MediaRecorder.isTypeSupported(codec)) {
-      mimeType = codec;
-      console.log('CCB: Using codec:', codec);
-      break;
-    }
-  }
-
-  if (!mimeType) {
-    console.error('CCB: No supported video codec found!');
-    mimeType = 'video/webm'; // fallback
-  }
+  // Select best supported codec
+  const codecs = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8',
+                  'video/webm;codecs=h264', 'video/webm', 'video/mp4'];
+  let mimeType = codecs.find(c => MediaRecorder.isTypeSupported(c)) || 'video/webm';
 
   this.width = function() { return stream_width; }
   this.height = function() { return stream_height; }
 
   this.start_recording = function() {
-    console.log('CCB: start_recording for ' + now_msg);
-
-    // Clear previous recording
     chunks = [];
     chunk_times = [];
-    recording = true;
-    recording_start_time = performance.now();
 
     try {
       recorder = new MediaRecorder(stream, {
@@ -104,71 +59,37 @@ function CircularChunkBuffer(stream, length_ms) {
             chunk_times.shift();
           }
 
-          // Try to update dimensions if not yet set (for remote streams)
+          // Update dimensions if not yet set (for remote streams)
           if (!dimensions_updated) {
             let updated_settings = stream.getVideoTracks()[0].getSettings();
             if (updated_settings.width && updated_settings.height) {
               stream_width = updated_settings.width;
               stream_height = updated_settings.height;
               dimensions_updated = true;
-              console.log('CCB: Stream dimensions updated to ' + stream_width + 'x' + stream_height);
-              if (resizing_callback) {
-                resizing_callback(stream_width, stream_height);
-              }
+              if (resizing_callback) resizing_callback(stream_width, stream_height);
             }
-          }
-
-          // Log buffer status periodically (every ~50 chunks)
-          if (chunks.length % 50 === 0) {
-            let total_size = chunks.reduce((sum, chunk) => sum + chunk.size, 0);
-            let buffer_duration = chunk_times.length > 1 ?
-              (chunk_times[chunk_times.length - 1] - chunk_times[0]) / 1000 : 0;
-            console.log('CCB: ' + chunks.length + ' chunks, ' +
-                       (total_size / 1024 / 1024).toFixed(2) + ' MB, ' +
-                       buffer_duration.toFixed(1) + 's buffered');
           }
         }
       };
 
-      recorder.onerror = (event) => {
-        console.error('CCB: MediaRecorder error:', event.error);
-      };
-
-      recorder.onstart = () => {
-        console.log('CCB: MediaRecorder started');
-      };
-
       let onstop_callback = null;
       recorder.onstop = () => {
-        console.log('CCB: MediaRecorder stopped, chunks=' + chunks.length);
         if (onstop_callback) {
           let cb = onstop_callback;
           onstop_callback = null;
           cb();
         }
       };
+      this.set_onstop_callback = (cb) => { onstop_callback = cb; };
 
-      // Allow playback to hook into onstop
-      this.set_onstop_callback = function(cb) {
-        onstop_callback = cb;
-      };
-
-      // Record continuously - no time slicing needed
-      // This creates a complete, valid video file
       recorder.start();
-
     } catch (error) {
       console.error('CCB: Error creating MediaRecorder:', error);
-      recording = false;
     }
   }
 
   this.stop_recording = function() {
-    console.log('CCB: stop_recording for ' + now_msg);
-    recording = false;
-
     if (recorder && recorder.state === 'recording') {
-      // Stop will trigger a final ondataavailable event
       recorder.stop();
     }
   }
@@ -182,43 +103,22 @@ function CircularChunkBuffer(stream, length_ms) {
   this.playback = function(canvas, repeat, playback_rate,
                            on_precanvas, on_playback_finished, on_done) {
 
-    // If recorder is still running or stopping, wait for it to complete
+    // Wait for recorder to stop if still active
     if (recorder && recorder.state !== 'inactive') {
-      console.log('CCB: Waiting for recorder to stop (state=' + recorder.state + ')');
-      this_ccb.set_onstop_callback(function() {
-        console.log('CCB: Recorder stopped callback, starting playback');
-        // Small delay to ensure final chunk is processed
-        setTimeout(function() {
-          this_ccb.playback(canvas, repeat, playback_rate, on_precanvas, on_playback_finished, on_done);
-        }, 100);
+      this_ccb.set_onstop_callback(() => {
+        setTimeout(() => this_ccb.playback(canvas, repeat, playback_rate,
+                                           on_precanvas, on_playback_finished, on_done), 100);
       });
       return;
     }
 
     if (chunks.length === 0) {
-      console.log("CCB: No chunks for playback! (" + now_msg + ")");
-      if (on_done) {
-        on_done();
-      }
+      if (on_done) on_done();
       return;
     }
 
-    let buffer_duration = chunk_times.length > 1 ?
-      (chunk_times[chunk_times.length - 1] - chunk_times[0]) / 1000 : 0;
-
-    console.log("CCB: Playback from " + now_msg + ": repeat=" + repeat +
-                ", playback_rate=" + playback_rate +
-                ", chunks=" + chunks.length +
-                ", buffer_duration=" + buffer_duration.toFixed(2) + "s" +
-                ", mimeType=" + mimeType);
-
-    // Combine chunks to create a complete, valid video file
-    // The circular buffer already contains only the duration we want
     let replay_blob = new Blob(chunks, { type: mimeType });
     let blob_url = URL.createObjectURL(replay_blob);
-
-    console.log("CCB: Created blob of size " + (replay_blob.size / 1024).toFixed(2) + " KB" +
-               ", type=" + replay_blob.type);
 
     // Create a video element for playback
     let playback_video = document.createElement('video');
@@ -261,56 +161,48 @@ function CircularChunkBuffer(stream, length_ms) {
       }
     }
 
-    function render_frame() {
-      if (!playback_video || playback_video.paused || playback_video.ended) {
-        return;
-      }
+    // Cache context for performance
+    let pre_context = pre_canvas.getContext('2d');
 
-      // Draw video frame to pre_canvas (for capture stream)
-      let pre_context = pre_canvas.getContext('2d');
+    function render_frame() {
+      if (!playback_video || playback_video.paused || playback_video.ended) return;
+
+      // Draw to pre_canvas for capture stream
       pre_context.drawImage(playback_video, 0, 0, pre_canvas.width, pre_canvas.height);
 
-      // Calculate scaling to fit canvas while maintaining aspect ratio
+      // Scale to fit canvas while maintaining aspect ratio
       let scale = Math.min(canvas.width / stream_width, canvas.height / stream_height);
       let draw_width = stream_width * scale;
       let draw_height = stream_height * scale;
-      let draw_x = (canvas.width - draw_width) / 2;
-      let draw_y = (canvas.height - draw_height) / 2;
 
-      // Clear canvas and draw scaled video
       context.fillStyle = 'black';
       context.fillRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(playback_video, draw_x, draw_y, draw_width, draw_height);
+      context.drawImage(playback_video,
+                       (canvas.width - draw_width) / 2,
+                       (canvas.height - draw_height) / 2,
+                       draw_width, draw_height);
 
       animation_frame = requestAnimationFrame(render_frame);
+    }
+
+    function play_video() {
+      playback_video.play().then(render_frame).catch((err) => {
+        console.error('CCB: Play failed:', err);
+        cleanup();
+        if (on_done) on_done();
+      });
     }
 
     function start_playback() {
       playback_video.src = blob_url;
       playback_video.playbackRate = playback_rate / 100;
 
-      playback_video.onloadedmetadata = function() {
-        console.log('CCB: Video loaded, duration=' + playback_video.duration.toFixed(2) + 's');
-
-        // Call on_precanvas callback once (for video upload compatibility)
-        if (rpt === 0 && on_precanvas) {
-          on_precanvas(pre_canvas);
-        }
-
-        // Play from the beginning (circular buffer already contains only the desired duration)
-        playback_video.play().then(() => {
-          console.log('CCB: Playback started (repeat ' + (rpt + 1) + '/' + repeat + ')');
-          render_frame();
-        }).catch((err) => {
-          console.error('CCB: Play failed:', err);
-          cleanup();
-          if (on_done) on_done();
-        });
+      playback_video.onloadedmetadata = () => {
+        if (rpt === 0 && on_precanvas) on_precanvas(pre_canvas);
+        play_video();
       };
 
-      playback_video.onended = function() {
-        console.log("CCB: Playback done (once)");
-
+      playback_video.onended = () => {
         if (animation_frame) {
           cancelAnimationFrame(animation_frame);
           animation_frame = null;
@@ -324,20 +216,12 @@ function CircularChunkBuffer(stream, length_ms) {
           }
         }
 
-        ++rpt;
-        if (rpt < repeat) {
-          // Reset video for next repetition - seek back to beginning
+        if (++rpt < repeat) {
           playback_video.currentTime = 0;
-          playback_video.play().then(() => {
-            console.log('CCB: Replay repeat ' + (rpt + 1) + '/' + repeat);
-            render_frame();
-          });
+          play_video();
         } else {
-          console.log("CCB: Playback fully complete (" + repeat + " time(s))");
           cleanup();
-          if (on_done) {
-            on_done();
-          }
+          if (on_done) on_done();
         }
       };
 
