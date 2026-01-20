@@ -70,7 +70,7 @@ function CircularChunkBuffer(stream, length_ms) {
   this.start_recording = function() {
     console.log('CCB: start_recording for ' + now_msg);
 
-    // Clear previous chunks
+    // Clear previous recording
     chunks = [];
     chunk_times = [];
     recording = true;
@@ -85,6 +85,8 @@ function CircularChunkBuffer(stream, length_ms) {
       recorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
           let chunk_time = performance.now();
+
+          // Store ALL chunks - we'll extract the right portion during playback
           chunks.push(event.data);
           chunk_times.push(chunk_time);
 
@@ -100,15 +102,6 @@ function CircularChunkBuffer(stream, length_ms) {
                 resizing_callback(stream_width, stream_height);
               }
             }
-          }
-
-          // Maintain circular buffer - remove chunks older than length_ms
-          // Keep a little extra to ensure we have a keyframe to start from
-          let buffer_length = length_ms * 1.2;  // 20% extra buffer
-          while (chunk_times.length > 1 &&
-                 chunk_times[chunk_times.length - 1] - chunk_times[0] > buffer_length) {
-            chunks.shift();
-            chunk_times.shift();
           }
 
           // Log buffer status periodically (every ~50 chunks)
@@ -146,9 +139,9 @@ function CircularChunkBuffer(stream, length_ms) {
         onstop_callback = cb;
       };
 
-      // Request data in small slices (100ms) for fine-grained circular buffer control
-      // Note: actual chunk timing depends on keyframe intervals set by the encoder
-      recorder.start(100);
+      // Record continuously - no time slicing needed
+      // This creates a complete, valid video file
+      recorder.start();
 
     } catch (error) {
       console.error('CCB: Error creating MediaRecorder:', error);
