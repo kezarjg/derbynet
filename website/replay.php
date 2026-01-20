@@ -39,7 +39,9 @@ if (isset($_REQUEST['address'])) {
 <script type="text/javascript" src="js/message-poller.js"></script>
 <script type="text/javascript" src="js/viewer-signaling.js"></script>
 <script type="text/javascript" src="js/video-capture.js"></script>
-<script type="text/javascript" src="js/circular-frame-buffer.js"></script>
+<!-- Using circular-chunk-buffer.js for memory efficiency (stores compressed video chunks
+     instead of uncompressed ImageData frames, reducing memory usage by ~250-1000x) -->
+<script type="text/javascript" src="js/circular-chunk-buffer.js"></script>
 <script type="text/javascript" src="js/video-device-picker.js"></script>
 <script type="text/javascript">
 
@@ -168,7 +170,7 @@ $(function() {
 
 function on_stream_ready(stream) {
   $("#waiting-for-remote").addClass('hidden');
-  g_recorder = new CircularFrameBuffer(stream, g_replay_options.length);
+  g_recorder = new CircularChunkBuffer(stream, g_replay_options.length);
   g_recorder.start_recording();
   document.getElementById("preview").srcObject = stream;
 }

@@ -1,5 +1,12 @@
 'use strict';
 
+// DEPRECATED: This implementation stores uncompressed ImageData frames which uses
+// ~2GB of memory for a 4-second buffer at 1920x1080@60fps. For resource-constrained
+// devices, use circular-chunk-buffer.js instead, which stores compressed video
+// chunks and uses ~2-8MB for the same buffer (250-1000x less memory).
+//
+// This file is kept for backward compatibility and testing purposes.
+
 function CircularFrameBuffer(stream, length_ms) {
   console.log('CFB: length_ms = ', length_ms);
   // We expect a video refresh rate of 60 frames per second
