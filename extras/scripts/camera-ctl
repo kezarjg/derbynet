@@ -1,0 +1,338 @@
+#!/usr/bin/env python3
+"""
+DerbyNet Camera Service Control Script
+
+Interactive menu-driven interface for managing the derbynet-camera systemd service.
+"""
+
+import subprocess
+import sys
+import os
+import signal
+
+# Service configuration
+SERVICE_NAME = "derbynet-camera.service"
+CONFIG_FILE = os.path.expanduser("~/derbynet/extras/headless-camera/config.yaml")
+SCRIPT_TITLE = "DerbyNet Camera Service Control"
+
+# ANSI color codes
+class Colors:
+    CYAN = "\033[96m"
+    GREEN = "\033[92m"
+    RED = "\033[91m"
+    YELLOW = "\033[93m"
+    BOLD = "\033[1m"
+    RESET = "\033[0m"
+
+def supports_color():
+    """Check if terminal supports color output."""
+    if not hasattr(sys.stdout, "isatty"):
+        return False
+    if not sys.stdout.isatty():
+        return False
+    if os.environ.get("TERM") == "dumb":
+        return False
+    return True
+
+USE_COLOR = supports_color()
+
+def color(text, color_code):
+    """Apply color to text if supported."""
+    if USE_COLOR:
+        return f"{color_code}{text}{Colors.RESET}"
+    return text
+
+def clear_screen():
+    """Clear the terminal screen."""
+    os.system("clear" if os.name == "posix" else "cls")
+
+def run_command(cmd, capture=True, sudo=False):
+    """Run a shell command and return result."""
+    if sudo:
+        cmd = ["sudo"] + cmd
+    try:
+        if capture:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            return result.returncode, result.stdout, result.stderr
+        else:
+            result = subprocess.run(cmd)
+            return result.returncode, "", ""
+    except subprocess.TimeoutExpired:
+        return 1, "", "Command timed out"
+    except FileNotFoundError:
+        return 1, "", f"Command not found: {cmd[0]}"
+    except KeyboardInterrupt:
+        return 130, "", "Interrupted"
+
+def print_menu():
+    """Display the main menu."""
+    clear_screen()
+    border = "═" * 46
+    print(color(f"╔{border}╗", Colors.CYAN))
+    print(color(f"║{SCRIPT_TITLE:^46}║", Colors.CYAN))
+    print(color(f"╠{border}╣", Colors.CYAN))
+    print(color("║", Colors.CYAN) + "  1. Show service status                      " + color("║", Colors.CYAN))
+    print(color("║", Colors.CYAN) + "  2. Start service                            " + color("║", Colors.CYAN))
+    print(color("║", Colors.CYAN) + "  3. Stop service                             " + color("║", Colors.CYAN))
+    print(color("║", Colors.CYAN) + "  4. Restart service                          " + color("║", Colors.CYAN))
+    print(color("║", Colors.CYAN) + "  5. Enable service (start on boot)           " + color("║", Colors.CYAN))
+    print(color("║", Colors.CYAN) + "  6. Disable service (don't start on boot)    " + color("║", Colors.CYAN))
+    print(color("║", Colors.CYAN) + "  7. View logs (live tail)                    " + color("║", Colors.CYAN))
+    print(color("║", Colors.CYAN) + "  8. View recent logs (last 100 lines)        " + color("║", Colors.CYAN))
+    print(color("║", Colors.CYAN) + "  9. Edit configuration file                  " + color("║", Colors.CYAN))
+    print(color("║", Colors.CYAN) + " 10. Health check                             " + color("║", Colors.CYAN))
+    print(color("║", Colors.CYAN) + "  0. Exit                                     " + color("║", Colors.CYAN))
+    print(color(f"╚{border}╝", Colors.CYAN))
+
+def wait_for_enter():
+    """Wait for user to press Enter."""
+    try:
+        input("\nPress Enter to continue...")
+    except KeyboardInterrupt:
+        pass
+
+def show_status():
+    """Display detailed service status."""
+    print(f"\n{color('Service Status:', Colors.BOLD)}\n")
+    returncode, stdout, stderr = run_command(["systemctl", "status", SERVICE_NAME])
+    if stdout:
+        print(stdout)
+    if stderr and returncode != 0:
+        print(color(stderr, Colors.RED))
+    wait_for_enter()
+
+def start_service():
+    """Start the service."""
+    print(f"\n{color('Starting service...', Colors.YELLOW)}")
+    returncode, stdout, stderr = run_command(["systemctl", "start", SERVICE_NAME], sudo=True)
+    if returncode == 0:
+        print(color("✓ Service started successfully", Colors.GREEN))
+    else:
+        print(color(f"✗ Failed to start service: {stderr}", Colors.RED))
+    wait_for_enter()
+
+def stop_service():
+    """Stop the service."""
+    print(f"\n{color('Stopping service...', Colors.YELLOW)}")
+    returncode, stdout, stderr = run_command(["systemctl", "stop", SERVICE_NAME], sudo=True)
+    if returncode == 0:
+        print(color("✓ Service stopped successfully", Colors.GREEN))
+    else:
+        print(color(f"✗ Failed to stop service: {stderr}", Colors.RED))
+    wait_for_enter()
+
+def restart_service():
+    """Restart the service."""
+    print(f"\n{color('Restarting service...', Colors.YELLOW)}")
+    returncode, stdout, stderr = run_command(["systemctl", "restart", SERVICE_NAME], sudo=True)
+    if returncode == 0:
+        print(color("✓ Service restarted successfully", Colors.GREEN))
+    else:
+        print(color(f"✗ Failed to restart service: {stderr}", Colors.RED))
+    wait_for_enter()
+
+def enable_service():
+    """Enable the service to start on boot."""
+    print(f"\n{color('Enabling service...', Colors.YELLOW)}")
+    returncode, stdout, stderr = run_command(["systemctl", "enable", SERVICE_NAME], sudo=True)
+    if returncode == 0:
+        print(color("✓ Service enabled - will start on boot", Colors.GREEN))
+    else:
+        print(color(f"✗ Failed to enable service: {stderr}", Colors.RED))
+    wait_for_enter()
+
+def disable_service():
+    """Disable the service from starting on boot."""
+    print(f"\n{color('Disabling service...', Colors.YELLOW)}")
+    returncode, stdout, stderr = run_command(["systemctl", "disable", SERVICE_NAME], sudo=True)
+    if returncode == 0:
+        print(color("✓ Service disabled - will not start on boot", Colors.GREEN))
+    else:
+        print(color(f"✗ Failed to disable service: {stderr}", Colors.RED))
+    wait_for_enter()
+
+def view_live_logs():
+    """View logs in real-time with journalctl -f."""
+    print(f"\n{color('Following logs (Ctrl+C to return to menu)...', Colors.YELLOW)}\n")
+    try:
+        subprocess.run(["journalctl", "-u", SERVICE_NAME, "-f"])
+    except KeyboardInterrupt:
+        print(color("\n\nReturning to menu...", Colors.YELLOW))
+
+def view_recent_logs():
+    """View recent log entries."""
+    print(f"\n{color('Recent logs (last 100 lines):', Colors.BOLD)}\n")
+    returncode, stdout, stderr = run_command(
+        ["journalctl", "-u", SERVICE_NAME, "-n", "100", "--no-pager"]
+    )
+    if stdout:
+        print(stdout)
+    elif returncode == 0:
+        print(color("No log entries found.", Colors.YELLOW))
+    else:
+        print(color(f"Error reading logs: {stderr}", Colors.RED))
+    wait_for_enter()
+
+def edit_config():
+    """Open configuration file in nano editor."""
+    config_path = CONFIG_FILE
+
+    # Check if config file exists
+    if not os.path.exists(config_path):
+        print(color(f"\n✗ Configuration file not found: {config_path}", Colors.RED))
+        wait_for_enter()
+        return
+
+    print(f"\n{color('Opening configuration file...', Colors.YELLOW)}")
+    print(f"File: {config_path}\n")
+
+    # Config in /etc requires sudo, home directory does not
+    needs_sudo = config_path.startswith("/etc")
+
+    if needs_sudo:
+        returncode, _, _ = run_command(["nano", config_path], capture=False, sudo=True)
+    else:
+        returncode, _, _ = run_command(["nano", config_path], capture=False)
+
+    if returncode == 0:
+        # Ask if user wants to restart service
+        try:
+            response = input("\nConfiguration may have changed. Restart service now? [y/N]: ")
+            if response.lower() in ("y", "yes"):
+                restart_service()
+                return  # restart_service already waits for enter
+        except KeyboardInterrupt:
+            pass
+
+    wait_for_enter()
+
+def health_check():
+    """Perform a comprehensive health check."""
+    print(f"\n{color('Health Check Results:', Colors.BOLD)}\n")
+
+    issues = []
+
+    # Check if service is running
+    returncode, stdout, _ = run_command(["systemctl", "is-active", SERVICE_NAME])
+    is_running = stdout.strip() == "active"
+    if is_running:
+        print(color("  [✓] Service is running", Colors.GREEN))
+    else:
+        print(color("  [✗] Service is NOT running", Colors.RED))
+        issues.append("Service is not running")
+
+    # Check if service is enabled
+    returncode, stdout, _ = run_command(["systemctl", "is-enabled", SERVICE_NAME])
+    is_enabled = stdout.strip() == "enabled"
+    if is_enabled:
+        print(color("  [✓] Service is enabled for boot", Colors.GREEN))
+    else:
+        print(color("  [!] Service is NOT enabled for boot", Colors.YELLOW))
+        issues.append("Service will not start on boot")
+
+    # Check if process exists (get PID)
+    if is_running:
+        returncode, stdout, _ = run_command(
+            ["systemctl", "show", SERVICE_NAME, "--property=MainPID", "--value"]
+        )
+        pid = stdout.strip()
+        if pid and pid != "0":
+            # Verify process exists
+            if os.path.exists(f"/proc/{pid}"):
+                print(color(f"  [✓] Process responding (PID: {pid})", Colors.GREEN))
+            else:
+                print(color(f"  [✗] Process not found (PID: {pid})", Colors.RED))
+                issues.append("Process not responding")
+        else:
+            print(color("  [!] Could not determine PID", Colors.YELLOW))
+
+    # Check for recent errors in logs
+    returncode, stdout, _ = run_command(
+        ["journalctl", "-u", SERVICE_NAME, "-n", "50", "--no-pager", "-p", "err"]
+    )
+    if stdout.strip():
+        error_lines = [l for l in stdout.strip().split("\n") if l.strip()]
+        # Filter out the "-- No entries --" message
+        if any("No entries" not in l for l in error_lines):
+            error_count = len([l for l in error_lines if "No entries" not in l])
+            print(color(f"  [!] {error_count} error(s) found in recent logs", Colors.YELLOW))
+            issues.append(f"{error_count} recent errors in logs")
+        else:
+            print(color("  [✓] No recent errors in logs", Colors.GREEN))
+    else:
+        print(color("  [✓] No recent errors in logs", Colors.GREEN))
+
+    # Check config file exists
+    if os.path.exists(CONFIG_FILE):
+        print(color(f"  [✓] Configuration file exists", Colors.GREEN))
+    else:
+        print(color(f"  [!] Configuration file not found: {CONFIG_FILE}", Colors.YELLOW))
+        issues.append("Configuration file missing")
+
+    # Summary
+    print()
+    if not issues:
+        print(color("Overall: All checks passed!", Colors.GREEN))
+    else:
+        print(color(f"Overall: {len(issues)} issue(s) found", Colors.YELLOW))
+
+    wait_for_enter()
+
+def main():
+    """Main entry point."""
+    # Handle Ctrl+C gracefully in menu
+    def signal_handler(sig, frame):
+        print(color("\n\nUse option 0 to exit.", Colors.YELLOW))
+
+    signal.signal(signal.SIGINT, signal_handler)
+
+    # Check if running as root (we don't want that)
+    if os.geteuid() == 0:
+        print(color("Warning: Running as root is not recommended.", Colors.YELLOW))
+        print("This script will use sudo for privileged operations.\n")
+
+    while True:
+        print_menu()
+
+        try:
+            choice = input("\nEnter choice [0-10]: ").strip()
+        except KeyboardInterrupt:
+            print()
+            continue
+        except EOFError:
+            break
+
+        if choice == "0" or choice.lower() == "q":
+            print(color("\nGoodbye!", Colors.GREEN))
+            break
+        elif choice == "1":
+            show_status()
+        elif choice == "2":
+            start_service()
+        elif choice == "3":
+            stop_service()
+        elif choice == "4":
+            restart_service()
+        elif choice == "5":
+            enable_service()
+        elif choice == "6":
+            disable_service()
+        elif choice == "7":
+            view_live_logs()
+        elif choice == "8":
+            view_recent_logs()
+        elif choice == "9":
+            edit_config()
+        elif choice == "10":
+            health_check()
+        else:
+            print(color("\nInvalid choice. Please enter 0-10.", Colors.RED))
+            wait_for_enter()
+
+if __name__ == "__main__":
+    main()
