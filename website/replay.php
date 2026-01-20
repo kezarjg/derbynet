@@ -177,10 +177,11 @@ function on_stream_ready(stream) {
 
 function on_remote_stream_ready(stream) {
   let resize = function(w, h) {
-    $("#recording-stream-info").removeClass('hidden');
-    $("#recording-stream-size").text(w + 'x' + h);
+    if (w > 0 && h > 0) {
+      $("#recording-stream-info").removeClass('hidden');
+      $("#recording-stream-size").text(w + 'x' + h);
+    }
   };
-  resize(-1, -1);  // Says we've got a stream, even if no frames yet.
   on_stream_ready(stream);
   g_recorder.on_resize(resize);
 }
