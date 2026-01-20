@@ -118,21 +118,9 @@ function CircularChunkBuffer(stream, length_ms) {
       return;
     }
 
-    // Extract only the chunks needed for the requested duration
-    let now = performance.now();
-    let cutoff_time = now - length_ms;
-    let start_index = 0;
-
-    // Find the first chunk that's within our desired time window
-    for (let i = 0; i < chunk_times.length; i++) {
-      if (chunk_times[i] >= cutoff_time) {
-        start_index = i;
-        break;
-      }
-    }
-
-    let replay_chunks = chunks.slice(start_index);
-    let replay_blob = new Blob(replay_chunks, { type: mimeType });
+    // Create blob from all buffered chunks (up to 20 seconds)
+    // We'll seek during playback to show only the last length_ms
+    let replay_blob = new Blob(chunks, { type: mimeType });
     let blob_url = URL.createObjectURL(replay_blob);
 
     // Create a video element for playback
@@ -208,13 +196,29 @@ function CircularChunkBuffer(stream, length_ms) {
       });
     }
 
+    let replay_start_time = 0;
+
     function start_playback() {
       playback_video.src = blob_url;
       playback_video.playbackRate = playback_rate / 100;
 
       playback_video.onloadedmetadata = () => {
+        // Calculate where to start: show the last length_ms of the buffered video
+        let video_duration_ms = playback_video.duration * 1000;
+        replay_start_time = Math.max(0, (video_duration_ms - length_ms) / 1000);
+
         if (rpt === 0 && on_precanvas) on_precanvas(pre_canvas);
-        play_video();
+
+        // Seek to start position, then play
+        if (replay_start_time > 0) {
+          playback_video.currentTime = replay_start_time;
+          playback_video.onseeked = () => {
+            playback_video.onseeked = null;
+            play_video();
+          };
+        } else {
+          play_video();
+        }
       };
 
       playback_video.onended = () => {
@@ -232,8 +236,11 @@ function CircularChunkBuffer(stream, length_ms) {
         }
 
         if (++rpt < repeat) {
-          playback_video.currentTime = 0;
-          play_video();
+          playback_video.currentTime = replay_start_time;
+          playback_video.onseeked = () => {
+            playback_video.onseeked = null;
+            play_video();
+          };
         } else {
           cleanup();
           if (on_done) on_done();
