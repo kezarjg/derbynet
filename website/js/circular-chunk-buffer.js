@@ -337,11 +337,13 @@ function CircularChunkBuffer(stream, length_ms) {
 
       playback_video.onerror = function(e) {
         console.error('CCB: Video error:', e);
-        console.error('CCB: Video error details - readyState:', playback_video.readyState,
-                     'networkState:', playback_video.networkState);
-        if (playback_video.error) {
-          console.error('CCB: MediaError code:', playback_video.error.code,
-                       'message:', playback_video.error.message);
+        if (playback_video) {
+          console.error('CCB: Video error details - readyState:', playback_video.readyState,
+                       'networkState:', playback_video.networkState);
+          if (playback_video.error) {
+            console.error('CCB: MediaError code:', playback_video.error.code,
+                         'message:', playback_video.error.message);
+          }
         }
         cleanup();
         if (on_done) on_done();
