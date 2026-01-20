@@ -5,9 +5,10 @@
 // compressed video chunks (~2-8MB for 4s), reducing memory by 250-1000x.
 //
 // This is a true circular buffer - old chunks are automatically discarded when
-// they exceed the configured buffer duration (length_ms).
+// they exceed 20 seconds. During playback, the last N seconds are extracted.
 //
 function CircularChunkBuffer(stream, length_ms) {
+  const BUFFER_DURATION_MS = 20000;  // Fixed 20-second circular buffer
   let this_ccb = this;
   let resizing_callback = null;
 
@@ -53,8 +54,8 @@ function CircularChunkBuffer(stream, length_ms) {
           chunks.push(event.data);
           chunk_times.push(chunk_time);
 
-          // Implement circular buffer: remove old chunks beyond our buffer duration
-          while (chunks.length > 1 && (chunk_time - chunk_times[0]) > length_ms) {
+          // Implement circular buffer: remove old chunks beyond 20 seconds
+          while (chunks.length > 1 && (chunk_time - chunk_times[0]) > BUFFER_DURATION_MS) {
             chunks.shift();
             chunk_times.shift();
           }
@@ -117,7 +118,21 @@ function CircularChunkBuffer(stream, length_ms) {
       return;
     }
 
-    let replay_blob = new Blob(chunks, { type: mimeType });
+    // Extract only the chunks needed for the requested duration
+    let now = performance.now();
+    let cutoff_time = now - length_ms;
+    let start_index = 0;
+
+    // Find the first chunk that's within our desired time window
+    for (let i = 0; i < chunk_times.length; i++) {
+      if (chunk_times[i] >= cutoff_time) {
+        start_index = i;
+        break;
+      }
+    }
+
+    let replay_chunks = chunks.slice(start_index);
+    let replay_blob = new Blob(replay_chunks, { type: mimeType });
     let blob_url = URL.createObjectURL(replay_blob);
 
     // Create a video element for playback
