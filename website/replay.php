@@ -194,7 +194,13 @@ function on_device_selection(selectq) {
     stream.getTracks().forEach(function(track) {
       track.stop();
     });
-  }	
+  }
+
+  // Stop any existing recorder
+  if (g_recorder) {
+    g_recorder.stop_recording();
+    g_recorder = null;
+  }
 
   let device_id = selectq.find(':selected').val();
 

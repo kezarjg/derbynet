@@ -19,14 +19,19 @@ function CircularChunkBuffer(stream, length_ms) {
 
   // Get stream dimensions
   let stream_settings = stream.getVideoTracks()[0].getSettings();
-  console.log('CircularChunkBuffer: stream reports w,h', stream_settings.width, stream_settings.height);
-
   let stream_width = stream_settings.width || 1280;
   let stream_height = stream_settings.height || 720;
 
   // For remote streams, dimensions may not be available immediately
   // We'll update them when we get actual video frames
-  let dimensions_updated = false;
+  let dimensions_updated = (stream_settings.width && stream_settings.height) ? true : false;
+
+  if (dimensions_updated) {
+    console.log('CircularChunkBuffer: stream dimensions ' + stream_width + 'x' + stream_height);
+  } else {
+    console.log('CircularChunkBuffer: stream dimensions not yet available, using defaults ' +
+                stream_width + 'x' + stream_height);
+  }
 
   // Monitor for stream dimension changes
   stream.getVideoTracks()[0].addEventListener('ended', function() {
