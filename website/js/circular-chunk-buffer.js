@@ -131,8 +131,19 @@ function CircularChunkBuffer(stream, length_ms) {
         console.log('CCB: MediaRecorder started');
       };
 
+      let onstop_callback = null;
       recorder.onstop = () => {
-        console.log('CCB: MediaRecorder stopped');
+        console.log('CCB: MediaRecorder stopped, chunks=' + chunks.length);
+        if (onstop_callback) {
+          let cb = onstop_callback;
+          onstop_callback = null;
+          cb();
+        }
+      };
+
+      // Allow playback to hook into onstop
+      this.set_onstop_callback = function(cb) {
+        onstop_callback = cb;
       };
 
       // Request data in small slices (100ms) for fine-grained circular buffer control
@@ -150,6 +161,7 @@ function CircularChunkBuffer(stream, length_ms) {
     recording = false;
 
     if (recorder && recorder.state === 'recording') {
+      // Stop will trigger a final ondataavailable event
       recorder.stop();
     }
   }
@@ -163,6 +175,19 @@ function CircularChunkBuffer(stream, length_ms) {
   this.playback = function(canvas, repeat, playback_rate,
                            on_precanvas, on_playback_finished, on_done) {
 
+    // If recorder is still running or stopping, wait for it to complete
+    if (recorder && recorder.state !== 'inactive') {
+      console.log('CCB: Waiting for recorder to stop (state=' + recorder.state + ')');
+      this_ccb.set_onstop_callback(function() {
+        console.log('CCB: Recorder stopped callback, starting playback');
+        // Small delay to ensure final chunk is processed
+        setTimeout(function() {
+          this_ccb.playback(canvas, repeat, playback_rate, on_precanvas, on_playback_finished, on_done);
+        }, 100);
+      });
+      return;
+    }
+
     if (chunks.length === 0) {
       console.log("CCB: No chunks for playback! (" + now_msg + ")");
       if (on_done) {
@@ -173,14 +198,16 @@ function CircularChunkBuffer(stream, length_ms) {
 
     console.log("CCB: Playback from " + now_msg + ": repeat=" + repeat +
                 ", playback_rate=" + playback_rate +
-                ", chunks=" + chunks.length);
+                ", chunks=" + chunks.length +
+                ", mimeType=" + mimeType);
 
     // Use ALL chunks to create a complete, valid video file
     // MediaRecorder chunks need to be combined in sequence to form a valid container
     let replay_blob = new Blob(chunks, { type: mimeType });
     let blob_url = URL.createObjectURL(replay_blob);
 
-    console.log("CCB: Created blob of size " + (replay_blob.size / 1024).toFixed(2) + " KB");
+    console.log("CCB: Created blob of size " + (replay_blob.size / 1024).toFixed(2) + " KB" +
+               ", type=" + replay_blob.type);
 
     // Create a video element for playback
     let playback_video = document.createElement('video');
