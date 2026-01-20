@@ -1,8 +1,11 @@
 'use strict';
 
-// CircularChunkBuffer: Memory-efficient video buffer using compressed chunks
+// CircularChunkBuffer: Memory-efficient circular video buffer using compressed chunks
 // Instead of storing uncompressed ImageData frames (~2GB for 4s), this stores
 // compressed video chunks (~2-8MB for 4s), reducing memory by 250-1000x.
+//
+// This is a true circular buffer - old chunks are automatically discarded when
+// they exceed the configured buffer duration (length_ms).
 //
 function CircularChunkBuffer(stream, length_ms) {
 
@@ -91,9 +94,15 @@ function CircularChunkBuffer(stream, length_ms) {
         if (event.data && event.data.size > 0) {
           let chunk_time = performance.now();
 
-          // Store ALL chunks - we'll extract the right portion during playback
+          // Add new chunk
           chunks.push(event.data);
           chunk_times.push(chunk_time);
+
+          // Implement circular buffer: remove old chunks beyond our buffer duration
+          while (chunks.length > 1 && (chunk_time - chunk_times[0]) > length_ms) {
+            chunks.shift();
+            chunk_times.shift();
+          }
 
           // Try to update dimensions if not yet set (for remote streams)
           if (!dimensions_updated) {
@@ -194,13 +203,17 @@ function CircularChunkBuffer(stream, length_ms) {
       return;
     }
 
+    let buffer_duration = chunk_times.length > 1 ?
+      (chunk_times[chunk_times.length - 1] - chunk_times[0]) / 1000 : 0;
+
     console.log("CCB: Playback from " + now_msg + ": repeat=" + repeat +
                 ", playback_rate=" + playback_rate +
                 ", chunks=" + chunks.length +
+                ", buffer_duration=" + buffer_duration.toFixed(2) + "s" +
                 ", mimeType=" + mimeType);
 
-    // Use ALL chunks to create a complete, valid video file
-    // MediaRecorder chunks need to be combined in sequence to form a valid container
+    // Combine chunks to create a complete, valid video file
+    // The circular buffer already contains only the duration we want
     let replay_blob = new Blob(chunks, { type: mimeType });
     let blob_url = URL.createObjectURL(replay_blob);
 
@@ -272,8 +285,6 @@ function CircularChunkBuffer(stream, length_ms) {
       animation_frame = requestAnimationFrame(render_frame);
     }
 
-    let replay_start_time = 0;  // Will be calculated once metadata loads
-
     function start_playback() {
       playback_video.src = blob_url;
       playback_video.playbackRate = playback_rate / 100;
@@ -281,32 +292,20 @@ function CircularChunkBuffer(stream, length_ms) {
       playback_video.onloadedmetadata = function() {
         console.log('CCB: Video loaded, duration=' + playback_video.duration.toFixed(2) + 's');
 
-        // Calculate where to start playback
-        // We want to show the last length_ms of the recorded video
-        let video_duration_ms = playback_video.duration * 1000;
-        replay_start_time = Math.max(0, (video_duration_ms - length_ms) / 1000);
-
-        console.log('CCB: Seeking to ' + replay_start_time.toFixed(2) + 's (showing last ' +
-                    (length_ms / 1000).toFixed(1) + 's)');
-
         // Call on_precanvas callback once (for video upload compatibility)
         if (rpt === 0 && on_precanvas) {
           on_precanvas(pre_canvas);
         }
 
-        // Seek to the start position, then play
-        playback_video.currentTime = replay_start_time;
-
-        playback_video.onseeked = function() {
-          playback_video.play().then(() => {
-            console.log('CCB: Playback started (repeat ' + (rpt + 1) + '/' + repeat + ')');
-            render_frame();
-          }).catch((err) => {
-            console.error('CCB: Play failed:', err);
-            cleanup();
-            if (on_done) on_done();
-          });
-        };
+        // Play from the beginning (circular buffer already contains only the desired duration)
+        playback_video.play().then(() => {
+          console.log('CCB: Playback started (repeat ' + (rpt + 1) + '/' + repeat + ')');
+          render_frame();
+        }).catch((err) => {
+          console.error('CCB: Play failed:', err);
+          cleanup();
+          if (on_done) on_done();
+        });
       };
 
       playback_video.onended = function() {
@@ -327,14 +326,12 @@ function CircularChunkBuffer(stream, length_ms) {
 
         ++rpt;
         if (rpt < repeat) {
-          // Reset video for next repetition - seek back to start of replay segment
-          playback_video.currentTime = replay_start_time;
-          playback_video.onseeked = function() {
-            playback_video.play().then(() => {
-              console.log('CCB: Replay repeat ' + (rpt + 1) + '/' + repeat);
-              render_frame();
-            });
-          };
+          // Reset video for next repetition - seek back to beginning
+          playback_video.currentTime = 0;
+          playback_video.play().then(() => {
+            console.log('CCB: Replay repeat ' + (rpt + 1) + '/' + repeat);
+            render_frame();
+          });
         } else {
           console.log("CCB: Playback fully complete (" + repeat + " time(s))");
           cleanup();
