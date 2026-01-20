@@ -227,6 +227,11 @@ function CircularChunkBuffer(stream, length_ms) {
         animation_frame = null;
       }
       if (playback_video) {
+        // Remove all event handlers to prevent errors after cleanup
+        playback_video.onloadedmetadata = null;
+        playback_video.onseeked = null;
+        playback_video.onended = null;
+        playback_video.onerror = null;
         playback_video.pause();
         playback_video.src = '';
         playback_video.remove();
@@ -234,6 +239,7 @@ function CircularChunkBuffer(stream, length_ms) {
       }
       if (blob_url) {
         URL.revokeObjectURL(blob_url);
+        blob_url = null;
       }
     }
 
