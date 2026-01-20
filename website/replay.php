@@ -41,7 +41,7 @@ if (isset($_REQUEST['address'])) {
 <script type="text/javascript" src="js/video-capture.js"></script>
 <!-- Using circular-chunk-buffer.js for memory efficiency (stores compressed video chunks
      instead of uncompressed ImageData frames, reducing memory usage by ~250-1000x) -->
-<script type="text/javascript" src="js/circular-chunk-buffer.js"></script>
+<script type="text/javascript" src="js/circular-chunk-buffer.js?v=2.0"></script>
 <script type="text/javascript" src="js/video-device-picker.js"></script>
 <script type="text/javascript">
 
