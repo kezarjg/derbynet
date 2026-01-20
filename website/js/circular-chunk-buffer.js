@@ -175,29 +175,9 @@ function CircularChunkBuffer(stream, length_ms) {
                 ", playback_rate=" + playback_rate +
                 ", chunks=" + chunks.length);
 
-    // Calculate which chunks to include in the replay
-    // We want the last length_ms worth of video
-    let replay_chunks = [];
-    let cutoff_time = chunk_times[chunk_times.length - 1] - length_ms;
-
-    for (let i = 0; i < chunks.length; i++) {
-      if (chunk_times[i] >= cutoff_time) {
-        replay_chunks.push(chunks[i]);
-      }
-    }
-
-    console.log("CCB: Using " + replay_chunks.length + " chunks for replay");
-
-    if (replay_chunks.length === 0) {
-      console.log("CCB: No chunks in time range for playback!");
-      if (on_done) {
-        on_done();
-      }
-      return;
-    }
-
-    // Create blob from chunks
-    let replay_blob = new Blob(replay_chunks, { type: mimeType });
+    // Use ALL chunks to create a complete, valid video file
+    // MediaRecorder chunks need to be combined in sequence to form a valid container
+    let replay_blob = new Blob(chunks, { type: mimeType });
     let blob_url = URL.createObjectURL(replay_blob);
 
     console.log("CCB: Created blob of size " + (replay_blob.size / 1024).toFixed(2) + " KB");
@@ -261,6 +241,8 @@ function CircularChunkBuffer(stream, length_ms) {
       animation_frame = requestAnimationFrame(render_frame);
     }
 
+    let replay_start_time = 0;  // Will be calculated once metadata loads
+
     function start_playback() {
       playback_video.src = blob_url;
       playback_video.playbackRate = playback_rate / 100;
@@ -268,19 +250,32 @@ function CircularChunkBuffer(stream, length_ms) {
       playback_video.onloadedmetadata = function() {
         console.log('CCB: Video loaded, duration=' + playback_video.duration.toFixed(2) + 's');
 
+        // Calculate where to start playback
+        // We want to show the last length_ms of the recorded video
+        let video_duration_ms = playback_video.duration * 1000;
+        replay_start_time = Math.max(0, (video_duration_ms - length_ms) / 1000);
+
+        console.log('CCB: Seeking to ' + replay_start_time.toFixed(2) + 's (showing last ' +
+                    (length_ms / 1000).toFixed(1) + 's)');
+
         // Call on_precanvas callback once (for video upload compatibility)
         if (rpt === 0 && on_precanvas) {
           on_precanvas(pre_canvas);
         }
 
-        playback_video.play().then(() => {
-          console.log('CCB: Playback started (repeat ' + (rpt + 1) + '/' + repeat + ')');
-          render_frame();
-        }).catch((err) => {
-          console.error('CCB: Play failed:', err);
-          cleanup();
-          if (on_done) on_done();
-        });
+        // Seek to the start position, then play
+        playback_video.currentTime = replay_start_time;
+
+        playback_video.onseeked = function() {
+          playback_video.play().then(() => {
+            console.log('CCB: Playback started (repeat ' + (rpt + 1) + '/' + repeat + ')');
+            render_frame();
+          }).catch((err) => {
+            console.error('CCB: Play failed:', err);
+            cleanup();
+            if (on_done) on_done();
+          });
+        };
       };
 
       playback_video.onended = function() {
@@ -301,9 +296,14 @@ function CircularChunkBuffer(stream, length_ms) {
 
         ++rpt;
         if (rpt < repeat) {
-          // Reset video for next repetition
-          playback_video.currentTime = 0;
-          start_playback();
+          // Reset video for next repetition - seek back to start of replay segment
+          playback_video.currentTime = replay_start_time;
+          playback_video.onseeked = function() {
+            playback_video.play().then(() => {
+              console.log('CCB: Replay repeat ' + (rpt + 1) + '/' + repeat);
+              render_frame();
+            });
+          };
         } else {
           console.log("CCB: Playback fully complete (" + repeat + " time(s))");
           cleanup();
@@ -315,6 +315,12 @@ function CircularChunkBuffer(stream, length_ms) {
 
       playback_video.onerror = function(e) {
         console.error('CCB: Video error:', e);
+        console.error('CCB: Video error details - readyState:', playback_video.readyState,
+                     'networkState:', playback_video.networkState);
+        if (playback_video.error) {
+          console.error('CCB: MediaError code:', playback_video.error.code,
+                       'message:', playback_video.error.message);
+        }
         cleanup();
         if (on_done) on_done();
       };
