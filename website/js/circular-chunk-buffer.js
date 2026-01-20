@@ -24,6 +24,10 @@ function CircularChunkBuffer(stream, length_ms) {
   let stream_width = stream_settings.width || 1280;
   let stream_height = stream_settings.height || 720;
 
+  // For remote streams, dimensions may not be available immediately
+  // We'll update them when we get actual video frames
+  let dimensions_updated = false;
+
   // Monitor for stream dimension changes
   stream.getVideoTracks()[0].addEventListener('ended', function() {
     console.log('CCB: stream track ended');
@@ -83,6 +87,20 @@ function CircularChunkBuffer(stream, length_ms) {
           let chunk_time = performance.now();
           chunks.push(event.data);
           chunk_times.push(chunk_time);
+
+          // Try to update dimensions if not yet set (for remote streams)
+          if (!dimensions_updated) {
+            let updated_settings = stream.getVideoTracks()[0].getSettings();
+            if (updated_settings.width && updated_settings.height) {
+              stream_width = updated_settings.width;
+              stream_height = updated_settings.height;
+              dimensions_updated = true;
+              console.log('CCB: Stream dimensions updated to ' + stream_width + 'x' + stream_height);
+              if (resizing_callback) {
+                resizing_callback(stream_width, stream_height);
+              }
+            }
+          }
 
           // Maintain circular buffer - remove chunks older than length_ms
           // Keep a little extra to ensure we have a keyframe to start from
