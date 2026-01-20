@@ -166,12 +166,18 @@ function send_replay_REPLAY($results = null) {
     $skipback = 10000;  // Default for entire race (covers DNF timeout)
 
     // If results are available, calculate skipback from longest finish time
+    // Exclude DNF times (>= 9.9 seconds) since the exciting part of the race
+    // ends when the last car actually crosses the finish line
     if ($results !== null) {
       $max_time_ms = 0;
       foreach ($results as $result) {
         if (isset($result['time'])) {
-          $time_ms = floatval($result['time']) * 1000;
-          $max_time_ms = max($max_time_ms, $time_ms);
+          $time_sec = floatval($result['time']);
+          // DNF times are typically 9.9999 seconds; exclude them
+          if ($time_sec < 9.9) {
+            $time_ms = $time_sec * 1000;
+            $max_time_ms = max($max_time_ms, $time_ms);
+          }
         }
       }
       if ($max_time_ms > 0) {
