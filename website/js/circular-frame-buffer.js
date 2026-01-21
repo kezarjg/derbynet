@@ -221,16 +221,18 @@ function CircularFrameBuffer(stream, length_ms) {
     // frame_times[last_recorded_frame_index] - playback_length_ms is the time of the
     // first frame for playback
     // If playback_length_ms not specified, use the recording length_ms
+    console.log(cfb_ts(), "CFB[" + cfb_id + "] playback() called with playback_length_ms=" + playback_length_ms + ", buffer length_ms=" + length_ms);
     if (!playback_length_ms) {
       playback_length_ms = length_ms;
+      console.log(cfb_ts(), "CFB[" + cfb_id + "] Using buffer length_ms as playback_length_ms: " + playback_length_ms);
     }
-    let start_goal = frame_times[last_recorded_frame_index] - Math.round(playback_length_ms);
-    console.log(cfb_ts(), "CFB[" + cfb_id + "] Playback starting: repeat=" + repeat +
-                ", playback_rate=" + playback_rate + ", playback_length_ms=" + playback_length_ms);
-    console.log(cfb_ts(), "CFB[" + cfb_id + "] last_recorded_frame_index = " + last_recorded_frame_index);
-    console.log(cfb_ts(), "CFB[" + cfb_id + "] Last frame time = " + frame_times[last_recorded_frame_index]);
-    console.log(cfb_ts(), "CFB[" + cfb_id + "] Start goal = " + start_goal);
-    
+    let last_frame_time = frame_times[last_recorded_frame_index];
+    let start_goal = last_frame_time - Math.round(playback_length_ms);
+    console.log(cfb_ts(), "CFB[" + cfb_id + "] === Playback Calculation ===");
+    console.log(cfb_ts(), "CFB[" + cfb_id + "]   last_recorded_frame_index = " + last_recorded_frame_index + " (frame_time=" + last_frame_time.toFixed(1) + "ms)");
+    console.log(cfb_ts(), "CFB[" + cfb_id + "]   playback_length_ms = " + playback_length_ms + "ms");
+    console.log(cfb_ts(), "CFB[" + cfb_id + "]   start_goal = " + last_frame_time.toFixed(1) + " - " + playback_length_ms + " = " + start_goal.toFixed(1) + "ms");
+
     let start_index = -1;
     for (let step = 0; step < frames.length; ++step) {
       let pindex = (last_recorded_frame_index + frames.length - step) % frames.length;
@@ -240,7 +242,15 @@ function CircularFrameBuffer(stream, length_ms) {
       start_index = pindex;
     }
 
-    console.log(cfb_ts(), "CFB[" + cfb_id + "] start_index = " + start_index);
+    // Calculate actual playback window
+    let start_frame_time = frame_times[start_index];
+    let actual_duration = last_frame_time - start_frame_time;
+    let num_frames = (last_recorded_frame_index - start_index + frames.length) % frames.length + 1;
+    console.log(cfb_ts(), "CFB[" + cfb_id + "]   start_index = " + start_index + " (frame_time=" + start_frame_time.toFixed(1) + "ms)");
+    console.log(cfb_ts(), "CFB[" + cfb_id + "]   Actual window: " + start_frame_time.toFixed(1) + "ms to " + last_frame_time.toFixed(1) + "ms = " + actual_duration.toFixed(1) + "ms (" + num_frames + " frames)");
+    console.log(cfb_ts(), "CFB[" + cfb_id + "]   Playback params: repeat=" + repeat + ", rate=" + playback_rate + "%");
+    let expected_playback_time = (actual_duration / (playback_rate / 100)) * repeat;
+    console.log(cfb_ts(), "CFB[" + cfb_id + "]   Expected playback duration: " + (expected_playback_time / 1000).toFixed(1) + "s");
 
     // During playback, pindex runs from start_index to last_recorded_frame_index, circularly,
     // inclusive, but may skip steps.

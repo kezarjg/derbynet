@@ -372,6 +372,8 @@ function start_playback(root, upload) {
       // We want to play from (trigger - skipback) to (trigger + record_after)
       // Total duration = skipback + record_after
       var adjusted_length = g_replay_options.skipback + g_record_after;
+      console.log(ts(), 'start_playback: skipback=' + g_replay_options.skipback + 'ms, g_record_after=' + g_record_after + 'ms, adjusted_length=' + adjusted_length + 'ms');
+      console.log(ts(), 'start_playback: count=' + g_replay_options.count + ', rate=' + g_replay_options.rate + '%');
 
       g_recorder.playback(playback,
                           g_replay_options.count,
