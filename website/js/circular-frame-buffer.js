@@ -1,13 +1,17 @@
 'use strict';
 
+function cfb_ts() {
+  return new Date().toISOString().substr(11, 12);
+}
+
 function CircularFrameBuffer(stream, length_ms) {
-  console.log('CFB: length_ms = ', length_ms);
+  console.log(cfb_ts(), 'CFB: created with length_ms =', length_ms);
   // We expect a video refresh rate of 60 frames per second
   const k_refresh_fps = 60;
   let debugging = false;
 
   let this_cfb = this;
-  let now_msg = (new Date()).toTimeString().split(" ", 1)[0];
+  let cfb_id = (new Date()).toTimeString().split(" ", 1)[0];  // ID for this buffer instance
 
   let resizing_callback = false;
   this.on_resize = function(cb) { resizing_callback = cb; }
@@ -69,7 +73,7 @@ function CircularFrameBuffer(stream, length_ms) {
     // provide information about video frame changes.
     report_fps(ts, "rec ");
     if (!recording) {
-      console.log(now_msg + " not recording in recording_callback");
+      console.log(cfb_ts(), "CFB[" + cfb_id + "] not recording in recording_callback (recording=" + recording + ")");
       return;
     }
 
@@ -127,7 +131,7 @@ function CircularFrameBuffer(stream, length_ms) {
           last_recorded_frame_index = frame_index;
         }
       } catch(error) {
-        console.log("CFB " + now_msg + " caught error " + error.message +
+        console.log(cfb_ts(), "CFB[" + cfb_id + "] caught error " + error.message +
                     " at frame_index " + frame_index);
         // For a remote stream, the width and height may not have been known
         // initially, and require fixing up here.
@@ -141,7 +145,7 @@ function CircularFrameBuffer(stream, length_ms) {
       if (this_cfb === g_recorder) {
         requestAnimationFrame(recording_callback);
       } else {
-        console.log("g_recorder value has changed, so stopping " + now_msg + " recorder.");
+        console.log(cfb_ts(), "CFB[" + cfb_id + "] g_recorder value has changed, stopping this recorder");
         this_cfb.stop_recording();
         offscreen_context = null;
         offscreen_canvas.remove();
@@ -151,16 +155,18 @@ function CircularFrameBuffer(stream, length_ms) {
   }
 
   this.start_recording = function() {
+    console.log(cfb_ts(), "CFB[" + cfb_id + "] start_recording called, length_ms=" + length_ms);
     frames = Array(Math.ceil(length_ms / 1000 * k_refresh_fps));
     frame_times = Array(Math.ceil(length_ms / 1000 * 60));
     frame_index = 0;
     last_recorded_frame_index = -1;
     recording = true;
+    console.log(cfb_ts(), "CFB[" + cfb_id + "] recording=" + recording + ", requesting animation frame");
     requestAnimationFrame(recording_callback);
   }
 
   this.stop_recording = function() {
-    console.log('stop_recording for ' + now_msg);
+    console.log(cfb_ts(), "CFB[" + cfb_id + "] stop_recording called, was recording=" + recording);
     recording = false;
   }
 
@@ -179,7 +185,7 @@ function CircularFrameBuffer(stream, length_ms) {
   this.playback = function(canvas, repeat, playback_rate,
                            on_precanvas, on_playback_finished, on_done, playback_length_ms) {
     if (!frames) {
-      console.log("No frames for playback! (" + now_msg + ")");
+      console.log(cfb_ts(), "CFB[" + cfb_id + "] No frames for playback!");
       if (on_done) {
         on_done();
       }
@@ -204,7 +210,7 @@ function CircularFrameBuffer(stream, length_ms) {
     let draw_y = (canvas.height - draw_height) / 2;
 
     if (last_recorded_frame_index < 0) {
-      console.log("No captured frames! (" + now_msg + ")");
+      console.log(cfb_ts(), "CFB[" + cfb_id + "] No captured frames!");
       if (on_done) {
         on_done();
       }
@@ -219,11 +225,11 @@ function CircularFrameBuffer(stream, length_ms) {
       playback_length_ms = length_ms;
     }
     let start_goal = frame_times[last_recorded_frame_index] - Math.round(playback_length_ms);
-    console.log("Playback from " + now_msg + ": repeat=" + repeat +
-                ", playback_rate=" + playback_rate);
-    console.log("last_recorded_frame_index = " + last_recorded_frame_index);
-    console.log("Last frame time = " + frame_times[last_recorded_frame_index]);
-    console.log("Start goal = " + start_goal);
+    console.log(cfb_ts(), "CFB[" + cfb_id + "] Playback starting: repeat=" + repeat +
+                ", playback_rate=" + playback_rate + ", playback_length_ms=" + playback_length_ms);
+    console.log(cfb_ts(), "CFB[" + cfb_id + "] last_recorded_frame_index = " + last_recorded_frame_index);
+    console.log(cfb_ts(), "CFB[" + cfb_id + "] Last frame time = " + frame_times[last_recorded_frame_index]);
+    console.log(cfb_ts(), "CFB[" + cfb_id + "] Start goal = " + start_goal);
     
     let start_index = -1;
     for (let step = 0; step < frames.length; ++step) {
@@ -234,7 +240,7 @@ function CircularFrameBuffer(stream, length_ms) {
       start_index = pindex;
     }
 
-    console.log("start_index = " + start_index);
+    console.log(cfb_ts(), "CFB[" + cfb_id + "] start_index = " + start_index);
 
     // During playback, pindex runs from start_index to last_recorded_frame_index, circularly,
     // inclusive, but may skip steps.
@@ -289,7 +295,7 @@ function CircularFrameBuffer(stream, length_ms) {
 
         requestAnimationFrame(playback_callback);
       } else {
-        console.log("Playback from " + now_msg + " done (once)");
+        console.log(cfb_ts(), "CFB[" + cfb_id + "] Playback done (once)");
 
         if (on_playback_finished) {
           try {
@@ -303,7 +309,7 @@ function CircularFrameBuffer(stream, length_ms) {
         if (rpt < repeat) {
           start_playback();
         } else {
-          console.log("Playback from " + now_msg + " fully complete (" + repeat + " time(s))");
+          console.log(cfb_ts(), "CFB[" + cfb_id + "] Playback fully complete (" + repeat + " time(s))");
           if (on_done) {
             on_done();
           }

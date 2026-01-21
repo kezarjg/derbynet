@@ -143,8 +143,12 @@ var g_replay_timeout = 0;
 // Milliseconds short of g_replay_length to start a replay after a race start.
 var g_replay_timeout_epsilon = 0;
 
+function ts() {
+  return new Date().toISOString().substr(11, 12);
+}
+
 function handle_replay_message(cmdline) {
-  console.log('* Replay message:', cmdline);
+  console.log(ts(), '* Replay message:', cmdline, 'g_preempted=' + g_preempted, 'g_replay_timeout=' + g_replay_timeout);
   var root = g_video_name_root;
   if (cmdline.startsWith("HELLO")) {
   } else if (cmdline.startsWith("TEST")) {
@@ -154,6 +158,7 @@ function handle_replay_message(cmdline) {
     // This assumes that we'll get a queued START when the page is freshly
     // loaded.
     g_video_name_root = cmdline.substr(6).trim();
+    console.log(ts(), 'START: new heat, resetting g_preempted to false, root=' + g_video_name_root);
     g_preempted = false;
   } else if (cmdline.startsWith("REPLAY")) {
     // REPLAY skipback showings rate
@@ -163,20 +168,25 @@ function handle_replay_message(cmdline) {
       clearTimeout(g_replay_timeout);
       g_replay_timeout = 0;
       g_preempted = true;  // Mark that we've handled the replay, preventing RACE_STARTS timeout
-      console.log('Triggering replay from REPLAY message', root);
+      console.log(ts(), 'Triggering replay from REPLAY message', root);
       on_replay(root);
+    } else {
+      console.log(ts(), 'REPLAY ignored because g_preempted=true');
     }
   } else if (cmdline.startsWith("CANCEL")) {
+    console.log(ts(), 'CANCEL received, clearing timeout', g_replay_timeout);
     clearTimeout(g_replay_timeout);
+    g_replay_timeout = 0;
   } else if (cmdline.startsWith("RACE_STARTS")) {
     // This message signals that the start gate has actually opened (if that can
     // be detected).  The START message identifies what heat is queued next.
     parse_replay_options(cmdline);
     // Use race_timeout (15s) to ensure we capture the entire race before auto-triggering
+    console.log(ts(), 'RACE_STARTS: setting timeout for', g_replay_options.race_timeout - g_replay_timeout_epsilon, 'ms');
     g_replay_timeout = setTimeout(
       function() {
         g_preempted = true;
-        console.log('Triggering replay from timeout after RACE_STARTS', root);
+        console.log(ts(), 'Triggering replay from timeout after RACE_STARTS', root);
         on_replay(root);
       },
       g_replay_options.race_timeout - g_replay_timeout_epsilon);
@@ -304,9 +314,9 @@ function upload_video(root, blob) {
 
 
 function on_replay(root) {
-  console.log('* on_replay');
+  console.log(ts(), '* on_replay called, root=' + root);
   if (root != g_video_name_root) {
-    console.log('** root=', root, ', g_video_name_root=', g_video_name_root);
+    console.log(ts(), '** WARNING: root mismatch: root=', root, ', g_video_name_root=', g_video_name_root);
   }
   // Capture this global variable before starting the asynchronous operation,
   // because it's reasonably likely to be clobbered by another queued message
@@ -323,7 +333,9 @@ function on_replay(root) {
   // Continue recording for configured duration before stopping (configured in Race Coordinator)
   var record_after = g_record_after;
 
+  console.log(ts(), 'on_replay: scheduling stop_recording in', record_after, 'ms');
   setTimeout(function() {
+    console.log(ts(), 'on_replay: calling stop_recording now');
     g_recorder.stop_recording();
   }, record_after);
 
@@ -335,7 +347,11 @@ function on_replay(root) {
 
   // Add recording duration to any configured delay to account for continued recording
   var total_delay = delay + record_after;
-  setTimeout(function() { start_playback(root, upload); }, total_delay);
+  console.log(ts(), 'on_replay: scheduling start_playback in', total_delay, 'ms (delay=' + delay + ', record_after=' + record_after + ')');
+  setTimeout(function() {
+    console.log(ts(), 'on_replay: calling start_playback now');
+    start_playback(root, upload);
+  }, total_delay);
 }
 
 function start_playback(root, upload) {
@@ -378,6 +394,7 @@ function start_playback(root, upload) {
                             }
                           },
                           function() {
+                            console.log(ts(), 'Playback complete, restarting recording');
                             $("#playback-background").hide('slide');
                             announce_to_interior('replay-ended');
                             g_recorder.start_recording();
