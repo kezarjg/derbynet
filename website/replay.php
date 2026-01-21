@@ -108,10 +108,10 @@ var g_record_after = <?php echo read_raceinfo('replay-record-after', '2000'); ?>
 // Calculate buffer size dynamically from skipback + record_after + padding
 $skipback = read_raceinfo('replay-skipback', '4000');
 $record_after = read_raceinfo('replay-record-after', '2000');
-// If skipback is 0 ("Entire race"), use 10 seconds as the skipback portion (covers DNF timeout)
-$effective_skipback = ($skipback == 0 || $skipback == '0') ? 10000 : intval($skipback);
-// Timeout should be long enough to cover entire race (10s covers DNF timeout)
-$race_timeout = 10000;
+// If skipback is 0 ("Entire race"), use 15 seconds as the skipback portion (covers DNF timeout)
+$effective_skipback = ($skipback == 0 || $skipback == '0') ? 15000 : intval($skipback);
+// Timeout should be long enough to cover entire race (15s covers DNF timeout)
+$race_timeout = 15000;
 // Add 2 seconds padding for server communication delays
 $buffer_size = $race_timeout + intval($record_after) + 2000;
 ?>
@@ -172,7 +172,7 @@ function handle_replay_message(cmdline) {
     // This message signals that the start gate has actually opened (if that can
     // be detected).  The START message identifies what heat is queued next.
     parse_replay_options(cmdline);
-    // Use race_timeout (10s) to ensure we capture the entire race before auto-triggering
+    // Use race_timeout (15s) to ensure we capture the entire race before auto-triggering
     g_replay_timeout = setTimeout(
       function() {
         g_preempted = true;
