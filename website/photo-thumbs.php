@@ -252,7 +252,7 @@ if (empty($allfiles)) {
 
 <p id="crop_instructions">Indicate new crop boundary, <i>then</i> press Crop.</p>
 <input type="button" value="Crop" onclick="cropPhoto(); return false;"/>
-<input type="button" value="Auto Detect <?php echo $repo == 'head' ? 'Face' : 'Car'; ?>" onclick="autoCropPhoto(); return false;"/>
+<input type="button" value="Auto Detect <?php echo $repo == 'head' ? 'Face' : 'Car'; ?>" onclick="autoDetectSubject(); return false;"/>
 <input type="button" value="Rotate Right" onclick="rotatePhoto(-90); return false;"/>
 <input type="button" value="Rotate Left" onclick="rotatePhoto(90); return false;"/>
 <input type="button" value="Cancel" onclick="close_modal('#photo_crop_modal');"/>

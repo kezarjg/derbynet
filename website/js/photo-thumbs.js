@@ -157,8 +157,11 @@ function removeRacerPhoto(previous) {
 
 
 var g_crop;
+var g_jcrop_api;
+
 function updateCrop(c) {
   g_crop = c;
+  console.log('Crop selection updated:', c);
 }
 
 function setupPhotoCrop(repo_name, basename, time) {
@@ -176,10 +179,16 @@ function on_work_image_loaded(img) {
   $("#work_image img").off('load');
 
   g_crop = null;
+  g_jcrop_api = null;
+
+  console.log('Work image loaded, dimensions:', $(img).width(), 'x', $(img).height());
 
   $('#work_image img').Jcrop({
-	onSelect: updateCrop,
-	onChange: updateCrop
+    onSelect: updateCrop,
+    onChange: updateCrop
+  }, function() {
+    g_jcrop_api = this;
+    console.log('Jcrop initialized, API stored');
   });
 }
 
@@ -229,22 +238,59 @@ function cropPhoto() {
   close_modal('#photo_crop_modal');
 }
 
-function autoCropPhoto() {
+function autoDetectSubject() {
   var photo_data = $("#work_image").data('photo');
+  console.log('Auto-detect starting for:', photo_data.basename, 'repo:', photo_data.repo);
+
   $.ajax(g_action_url,
          {type: 'POST',
-          data: {action: 'photo.autocrop',
+          data: {action: 'photo.detect',
                  repo: photo_data.repo,
                  image_name: photo_data.basename},
           success: function(data) {
-            if (data.hasOwnProperty('cache-breaker')) {
-              var breaker_time = data['cache-breaker'];
-              setupPhotoCrop(photo_data.repo, photo_data.basename, breaker_time);
-              updateImage(photo_data.source, breaker_time);
+            console.log('Detection response:', data);
+
+            if (data.hasOwnProperty('region')) {
+              var region = data.region;
+              var orig_w = data.original_width;
+              var orig_h = data.original_height;
+
+              // Get displayed image dimensions
+              var display_w = $('#work_image img').width();
+              var display_h = $('#work_image img').height();
+
+              console.log('Original image:', orig_w, 'x', orig_h);
+              console.log('Display image:', display_w, 'x', display_h);
+              console.log('Detected region (original coords):', region);
+
+              // Scale coordinates from original to display size
+              var scale_x = display_w / orig_w;
+              var scale_y = display_h / orig_h;
+
+              var x1 = region.x * scale_x;
+              var y1 = region.y * scale_y;
+              var x2 = (region.x + region.width) * scale_x;
+              var y2 = (region.y + region.height) * scale_y;
+
+              console.log('Scaled selection:', x1, y1, x2, y2);
+
+              // Set the Jcrop selection
+              if (g_jcrop_api) {
+                g_jcrop_api.setSelect([x1, y1, x2, y2]);
+                console.log('Jcrop selection set');
+              } else {
+                console.error('Jcrop API not available');
+                alert('Could not set selection - try again');
+              }
             }
-            if (data.hasOwnProperty('failure')) {
-              alert(data.failure.description || 'Auto-crop failed');
+            if (data.hasOwnProperty('outcome') && data.outcome.summary == 'failure') {
+              console.error('Detection failed:', data.outcome.description);
+              alert(data.outcome.description || 'Auto-detect failed');
             }
+          },
+          error: function(xhr, status, error) {
+            console.error('AJAX error:', status, error);
+            alert('Detection request failed');
           }
          });
 }
