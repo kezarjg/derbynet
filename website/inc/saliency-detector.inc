@@ -3,8 +3,8 @@
 // Uses edge detection and contrast analysis to find the most visually interesting region
 
 class SaliencyDetector {
-  // Padding factor to add around detected region (1.15 = 15% padding)
-  private $padding_factor = 1.15;
+  // Padding factor to add around detected region (1.02 = 2% padding)
+  private $padding_factor = 1.02;
 
   // Target aspect ratio for car photos (4:3 landscape)
   private $target_aspect = 4.0 / 3.0;

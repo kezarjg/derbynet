@@ -72,7 +72,7 @@ if ($repo_name == 'head') {
 } else {
   // Use saliency detection for car photos
   require_once('inc/saliency-detector.inc');
-  $detector = new SaliencyDetector(1.15, 4.0 / 3.0);  // 15% padding, 4:3 landscape
+  $detector = new SaliencyDetector(1.02, 4.0 / 3.0);  // 2% padding, 4:3 landscape
   $region = $detector->detect($im);
 }
 
