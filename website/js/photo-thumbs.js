@@ -157,8 +157,28 @@ function removeRacerPhoto(previous) {
 
 
 var g_crop;
+var g_jcrop_api;
+
 function updateCrop(c) {
   g_crop = c;
+}
+
+function getAspectRatio() {
+  // 3:4 portrait for racer headshots, 4:3 landscape for car photos
+  return g_photo_repo_name === 'head' ? 3/4 : 4/3;
+}
+
+function toggleAspectLock() {
+  if (!g_jcrop_api) return;
+
+  var locked = $('#aspect-lock-checkbox').is(':checked');
+  var ratio = locked ? getAspectRatio() : 0;
+
+  g_jcrop_api.setOptions({ aspectRatio: ratio });
+
+  // Clear current selection when changing aspect ratio
+  g_jcrop_api.release();
+  g_crop = null;
 }
 
 function setupPhotoCrop(repo_name, basename, time) {
@@ -176,10 +196,22 @@ function on_work_image_loaded(img) {
   $("#work_image img").off('load');
 
   g_crop = null;
+  g_jcrop_api = null;
+
+  // Update aspect ratio label based on repo type
+  var ratioText = g_photo_repo_name === 'head' ? '3:4' : '4:3';
+  $('#aspect-ratio-text').text(ratioText);
+
+  // Check if aspect lock is enabled (checked by default)
+  var locked = $('#aspect-lock-checkbox').is(':checked');
+  var ratio = locked ? getAspectRatio() : 0;
 
   $('#work_image img').Jcrop({
-	onSelect: updateCrop,
-	onChange: updateCrop
+    onSelect: updateCrop,
+    onChange: updateCrop,
+    aspectRatio: ratio
+  }, function() {
+    g_jcrop_api = this;
   });
 }
 

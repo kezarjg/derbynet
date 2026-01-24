@@ -251,6 +251,10 @@ if (empty($allfiles)) {
 <div id="work_image"></div>
 
 <p id="crop_instructions">Indicate new crop boundary, <i>then</i> press Crop.</p>
+<label id="aspect-lock-label">
+  <input type="checkbox" id="aspect-lock-checkbox" checked onchange="toggleAspectLock();"/>
+  Lock <span id="aspect-ratio-text">4:3</span> aspect ratio
+</label>
 <input type="button" value="Crop" onclick="cropPhoto(); return false;"/>
 <input type="button" value="Rotate Right" onclick="rotatePhoto(-90); return false;"/>
 <input type="button" value="Rotate Left" onclick="rotatePhoto(90); return false;"/>

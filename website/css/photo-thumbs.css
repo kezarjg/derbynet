@@ -98,6 +98,20 @@ span.car-number {
   margin-bottom: 5px;
 }
 
+#aspect-lock-label {
+  display: block;
+  text-align: center;
+  margin: 10px 0;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+#aspect-lock-checkbox {
+  margin-right: 5px;
+  transform: scale(1.2);
+  cursor: pointer;
+}
+
 .trouble {
     border: 5px solid #ff6666;
 }
