@@ -229,6 +229,26 @@ function cropPhoto() {
   close_modal('#photo_crop_modal');
 }
 
+function autoCropPhoto() {
+  var photo_data = $("#work_image").data('photo');
+  $.ajax(g_action_url,
+         {type: 'POST',
+          data: {action: 'photo.autocrop',
+                 repo: photo_data.repo,
+                 image_name: photo_data.basename},
+          success: function(data) {
+            if (data.hasOwnProperty('cache-breaker')) {
+              var breaker_time = data['cache-breaker'];
+              setupPhotoCrop(photo_data.repo, photo_data.basename, breaker_time);
+              updateImage(photo_data.source, breaker_time);
+            }
+            if (data.hasOwnProperty('failure')) {
+              alert(data.failure.description || 'Auto-crop failed');
+            }
+          }
+         });
+}
+
 function rotatePhoto(angle) {
   var photo_data = $("#work_image").data('photo');
   $.ajax(g_action_url,
