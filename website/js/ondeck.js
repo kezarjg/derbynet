@@ -168,12 +168,18 @@ function repopulate_schedule(json) {
     row.toggleClass('populated', row_has_photos);
   }
 
-  $("table#schedule tr#heat_" + json['current-heat']['roundid'] +
-    '_' + json['current-heat']['heat']).addClass('curheat');
+  // Only highlight current/next heats if racing is actively in progress
+  if (json['current-heat']['now_racing']) {
+    $("table#schedule tr#heat_" + json['current-heat']['roundid'] +
+      '_' + json['current-heat']['heat']).addClass('curheat');
 
-  if (json['ondeck']['next'] && g_set_nextheat) {
-    $("table#schedule tr#heat_" + json['ondeck']['next']['roundid'] +
-      '_' + json['ondeck']['next']['heat']).addClass('nextheat');
+    if (json['ondeck']['next'] && g_set_nextheat) {
+      $("table#schedule tr#heat_" + json['ondeck']['next']['roundid'] +
+        '_' + json['ondeck']['next']['heat']).addClass('nextheat');
+    }
+    $("table#schedule").addClass('curgroup');
+  } else {
+    $("table#schedule").removeClass('curgroup');
   }
 }
 
@@ -335,6 +341,7 @@ function update_schedule(json, current_heat, next_heat) {
       json['current-heat']['use_master_sched'] == current_heat['use_master_sched'] &&
       json['current-heat']['roundid'] == current_heat['roundid'] &&
       json['current-heat']['heat'] == current_heat['heat'] &&
+      json['current-heat']['now_racing'] == current_heat['now_racing'] &&
       json['ondeck']['chart'].length == $("table#schedule td.chart").length) {
     // No change, do nothing
   } else if (next_heat &&
