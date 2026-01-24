@@ -112,7 +112,8 @@ $record_after = read_raceinfo('replay-record-after', '2000');
 $effective_skipback = ($skipback == 0 || $skipback == '0') ? 15000 : intval($skipback);
 // Timeout should be long enough to cover entire race (15s covers DNF timeout)
 $race_timeout = 15000;
-// Add 2 seconds padding for server communication delays
+// Buffer size needs to accommodate maximum possible playback window:
+// race_timeout + record_after + 2s padding
 $buffer_size = $race_timeout + intval($record_after) + 2000;
 ?>
 var g_replay_options = {
@@ -127,12 +128,9 @@ var g_replay_options = {
 function parse_replay_options(cmdline) {
   // Server sends skipback value in the message
   g_replay_options.skipback = parseInt(cmdline.split(" ")[1]);
-  // Buffer size needs to accommodate race_timeout + record_after + padding
-  // (race_timeout is always used for the buffer, regardless of skipback setting)
-  g_replay_options.length = g_replay_options.race_timeout + g_record_after + 2000;
-  if (g_recorder) {
-    g_recorder.set_recording_length(g_replay_options.length);
-  }
+  // Buffer size is computed server-side and remains constant
+  // No need to adjust buffer length here since it's set correctly at initialization
+  
   g_replay_options.count = parseInt(cmdline.split(" ")[2]);
   g_replay_options.rate = parseInt(cmdline.split(" ")[3]);
 }
@@ -183,11 +181,19 @@ function handle_replay_message(cmdline) {
     parse_replay_options(cmdline);
     // Use race_timeout (15s) to ensure we capture the entire race before auto-triggering
     console.log(ts(), 'RACE_STARTS: setting timeout for', g_replay_options.race_timeout - g_replay_timeout_epsilon, 'ms');
+    // Clear any previous timeouts to prevent duplicates
+    if (g_replay_timeout) {
+      clearTimeout(g_replay_timeout);
+    }
     g_replay_timeout = setTimeout(
       function() {
-        g_preempted = true;
-        console.log(ts(), 'Triggering replay from timeout after RACE_STARTS', root);
-        on_replay(root);
+        // Only trigger if not preempted by a REPLAY message
+        if (!g_preempted) {
+          console.log(ts(), 'Triggering replay from timeout after RACE_STARTS', root);
+          on_replay(root);
+        } else {
+          console.log(ts(), 'RACE_STARTS timeout ignored because already preempted');
+        }
       },
       g_replay_options.race_timeout - g_replay_timeout_epsilon);
   } else {
@@ -225,6 +231,13 @@ function on_device_selection(selectq) {
     stream.getTracks().forEach(function(track) {
       track.stop();
     });
+  }
+  
+  // Dispose of existing recorder if present
+  if (g_recorder) {
+    console.log(ts(), 'Disposing existing recorder before switching devices');
+    g_recorder.dispose();
+    g_recorder = null;
   }	
 
   let device_id = selectq.find(':selected').val();
@@ -415,7 +428,16 @@ function on_proceed() {
       $(window).off('resize');
       screenfull.request();
       setTimeout(function() {
-          $(window).on('resize', function(event) { on_setup(); });
+$(window).on('resize', function(event) { on_setup(); });
+
+// Add cleanup handler for page unload
+$(window).on('beforeunload', function() {
+  if (g_recorder) {
+    console.log(ts(), 'Cleaning up recorder on page unload');
+    g_recorder.dispose();
+    g_recorder = null;
+  }
+});
         }, 2000);
     }
   }

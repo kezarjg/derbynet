@@ -161,30 +161,39 @@ function send_replay_START(&$current) {
 function send_replay_REPLAY($results = null) {
   $skipback = read_raceinfo('replay-skipback', '4000');
 
-  // If skipback is 0 ("Entire race"), calculate from results or use 15s default
+  // If skipback is 0 ("Entire race"), calculate from results or use 10s default
   if ($skipback == 0 || $skipback == '0') {
-    $skipback = 15000;  // Default for entire race (covers DNF timeout)
+    $skipback = 10000;  // Default for entire race (covers DNF timeout)
 
     // If results are available, calculate skipback from longest finish time
-    // Exclude DNF times (>= 9.9 seconds) since the exciting part of the race
-    // ends when the last car actually crosses the finish line
     if ($results !== null) {
       $max_time_ms = 0;
+      $dnf_threshold = 9.0; // Times at or above this are considered DNFs
+      
       foreach ($results as $result) {
         if (isset($result['time'])) {
           $time_sec = floatval($result['time']);
-          // DNF times are typically 9.9999 seconds; exclude them
-          if ($time_sec < 9.9) {
+          // Exclude DNF times which are typically >= 9.0 seconds
+          // Normal race times are usually under 5 seconds for typical tracks
+          if ($time_sec < $dnf_threshold) {
             $time_ms = $time_sec * 1000;
             $max_time_ms = max($max_time_ms, $time_ms);
           }
         }
       }
+      
       if ($max_time_ms > 0) {
-        // Add 500ms margin for pre-start moment
-        $skipback = intval($max_time_ms) + 500;
+        // Add 1000ms margin for pre-start moment and post-finish celebration
+        $skipback = intval($max_time_ms) + 1000;
+      } else {
+        // If all results are DNF or invalid, fallback to default
+        $skipback = 10000; // 10 seconds default
       }
     }
+  } else {
+    // Standard processing when skipback is explicitly set
+      // Add 500ms margin for pre-start moment
+      $skipback = intval($skipback) + 500;
   }
 
   $num_showings = read_raceinfo('replay-num-showings', '2');
@@ -201,9 +210,9 @@ function send_replay_CANCEL() {
 function send_replay_RACE_STARTS() {
   $skipback = read_raceinfo('replay-skipback', '4000');
 
-  // If skipback is 0 ("Entire race"), use 15 seconds (covers DNF timeout)
+  // If skipback is 0 ("Entire race"), use 10 seconds (covers DNF timeout)
   if ($skipback == 0 || $skipback == '0') {
-    $skipback = 15000;
+    $skipback = 10000;
   }
 
   $num_showings = read_raceinfo('replay-num-showings', '2');

@@ -173,6 +173,29 @@ function CircularFrameBuffer(stream, length_ms) {
   this.width = function() { return offscreen_video.width; }
   this.height = function() { return offscreen_video.height; }
 
+  // Add a dispose method to clean up resources
+  this.dispose = function() {
+    // Stop any ongoing recording
+    if (recording) {
+      recording = false;
+    }
+    
+    // Clear any references that might prevent garbage collection
+    if (offscreen_canvas) {
+      offscreen_canvas.remove();
+      offscreen_canvas = null;
+    }
+    
+    if (offscreen_context) {
+      offscreen_context = null;
+    }
+    
+    frames = null;
+    frame_times = null;
+    
+    console.log(cfb_ts(), "CFB[" + cfb_id + "] disposed");
+  };
+
   // canvas -- a DOM <canvas> element
   // repeat -- number of times to play back the video
   // playback_rate -- percentage multiplier for playback (50 = half speed slow-motion)
@@ -242,9 +265,27 @@ function CircularFrameBuffer(stream, length_ms) {
       start_index = pindex;
     }
 
-    // Calculate actual playback window
+    // Calculate actual playback window with bounds checking
+    if (start_index < 0 || start_index >= frame_times.length) {
+      console.error(cfb_ts(), "CFB[" + cfb_id + "] Invalid start_index: " + start_index);
+      if (on_done) {
+        on_done();
+      }
+      return;
+    }
+    
     let start_frame_time = frame_times[start_index];
     let actual_duration = last_frame_time - start_frame_time;
+    
+    // Validate frame indices
+    if (last_recorded_frame_index < 0 || last_recorded_frame_index >= frames.length) {
+      console.error(cfb_ts(), "CFB[" + cfb_id + "] Invalid last_recorded_frame_index: " + last_recorded_frame_index);
+      if (on_done) {
+        on_done();
+      }
+      return;
+    }
+    
     let num_frames = (last_recorded_frame_index - start_index + frames.length) % frames.length + 1;
     console.log(cfb_ts(), "CFB[" + cfb_id + "]   start_index = " + start_index + " (frame_time=" + start_frame_time.toFixed(1) + "ms)");
     console.log(cfb_ts(), "CFB[" + cfb_id + "]   Actual window: " + start_frame_time.toFixed(1) + "ms to " + last_frame_time.toFixed(1) + "ms = " + actual_duration.toFixed(1) + "ms (" + num_frames + " frames)");
