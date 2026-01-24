@@ -1,6 +1,6 @@
 <?php
-// Saliency-based object detection for car photos
-// Uses edge detection and contrast analysis to find the most visually interesting region
+// Object detection for car photos
+// Optimized for white light box photography - finds dark objects on light backgrounds
 
 class SaliencyDetector {
   // Padding factor to add around detected region (1.02 = 2% padding)
@@ -9,13 +9,18 @@ class SaliencyDetector {
   // Target aspect ratio for car photos (4:3 landscape)
   private $target_aspect = 4.0 / 3.0;
 
-  // Threshold for saliency (0-255), pixels above this are considered salient
-  private $saliency_threshold = 30;
+  // Darkness threshold - pixels must be this much darker than background
+  // Higher value = stricter detection (requires darker pixels)
+  private $darkness_threshold = 60;
+
+  // Border margin to ignore (percentage) - helps exclude edges of light box
+  // 8% margin helps ignore table edges, checkered patterns, etc. outside the light box
+  private $border_margin = 0.08;
 
   // Downsample factor for faster processing
   private $downsample_max = 400;
 
-  public function __construct($padding_factor = 1.15, $target_aspect = null) {
+  public function __construct($padding_factor = 1.02, $target_aspect = null) {
     $this->padding_factor = $padding_factor;
     if ($target_aspect !== null) {
       $this->target_aspect = $target_aspect;
@@ -42,11 +47,8 @@ class SaliencyDetector {
       $small_h = $height;
     }
 
-    // Convert to grayscale and compute saliency map
-    $saliency = $this->compute_saliency_map($small, $small_w, $small_h);
-
-    // Find bounding box of salient region
-    $bbox = $this->find_salient_bbox($saliency, $small_w, $small_h);
+    // Use brightness-based detection for white box photography
+    $bbox = $this->find_dark_object($small, $small_w, $small_h);
 
     if ($small !== $image) {
       imagedestroy($small);
@@ -71,56 +73,72 @@ class SaliencyDetector {
     return $bbox;
   }
 
-  // Compute saliency map using edge detection (Sobel-like)
-  private function compute_saliency_map($image, $width, $height) {
-    $saliency = array_fill(0, $height, array_fill(0, $width, 0));
+  // Find dark object on light background (optimized for white box photography)
+  private function find_dark_object($image, $width, $height) {
+    // Calculate border margins to ignore
+    $margin_x = intval($width * $this->border_margin);
+    $margin_y = intval($height * $this->border_margin);
 
-    // Convert to grayscale array
-    $gray = array();
-    for ($y = 0; $y < $height; $y++) {
-      $gray[$y] = array();
-      for ($x = 0; $x < $width; $x++) {
-        $rgb = imagecolorat($image, $x, $y);
-        $r = ($rgb >> 16) & 0xFF;
-        $g = ($rgb >> 8) & 0xFF;
-        $b = $rgb & 0xFF;
-        // Standard grayscale conversion
-        $gray[$y][$x] = intval(0.299 * $r + 0.587 * $g + 0.114 * $b);
+    // Sample corners to estimate background brightness (should be white/light)
+    $corner_samples = array();
+    $sample_size = min(10, intval($width * 0.05), intval($height * 0.05));
+    if ($sample_size < 3) $sample_size = 3;
+
+    // Top-left corner
+    for ($y = $margin_y; $y < $margin_y + $sample_size && $y < $height; $y++) {
+      for ($x = $margin_x; $x < $margin_x + $sample_size && $x < $width; $x++) {
+        $corner_samples[] = $this->get_brightness($image, $x, $y);
+      }
+    }
+    // Top-right corner
+    for ($y = $margin_y; $y < $margin_y + $sample_size && $y < $height; $y++) {
+      for ($x = $width - $margin_x - $sample_size; $x < $width - $margin_x; $x++) {
+        if ($x >= 0) {
+          $corner_samples[] = $this->get_brightness($image, $x, $y);
+        }
+      }
+    }
+    // Bottom-left corner
+    for ($y = $height - $margin_y - $sample_size; $y < $height - $margin_y; $y++) {
+      if ($y >= 0) {
+        for ($x = $margin_x; $x < $margin_x + $sample_size && $x < $width; $x++) {
+          $corner_samples[] = $this->get_brightness($image, $x, $y);
+        }
+      }
+    }
+    // Bottom-right corner
+    for ($y = $height - $margin_y - $sample_size; $y < $height - $margin_y; $y++) {
+      if ($y >= 0) {
+        for ($x = $width - $margin_x - $sample_size; $x < $width - $margin_x; $x++) {
+          if ($x >= 0) {
+            $corner_samples[] = $this->get_brightness($image, $x, $y);
+          }
+        }
       }
     }
 
-    // Compute gradient magnitude (simplified Sobel)
-    for ($y = 1; $y < $height - 1; $y++) {
-      for ($x = 1; $x < $width - 1; $x++) {
-        // Horizontal gradient
-        $gx = -$gray[$y-1][$x-1] + $gray[$y-1][$x+1]
-            - 2*$gray[$y][$x-1] + 2*$gray[$y][$x+1]
-            - $gray[$y+1][$x-1] + $gray[$y+1][$x+1];
-
-        // Vertical gradient
-        $gy = -$gray[$y-1][$x-1] - 2*$gray[$y-1][$x] - $gray[$y-1][$x+1]
-            + $gray[$y+1][$x-1] + 2*$gray[$y+1][$x] + $gray[$y+1][$x+1];
-
-        // Gradient magnitude
-        $saliency[$y][$x] = min(255, intval(sqrt($gx*$gx + $gy*$gy)));
-      }
+    if (empty($corner_samples)) {
+      return false;
     }
 
-    return $saliency;
-  }
+    // Background brightness is the median of corner samples (robust to outliers)
+    sort($corner_samples);
+    $bg_brightness = $corner_samples[intval(count($corner_samples) / 2)];
 
-  // Find bounding box containing salient pixels
-  private function find_salient_bbox($saliency, $width, $height) {
+    // Threshold for detecting dark pixels (pixels darker than this are the subject)
+    $threshold = $bg_brightness - $this->darkness_threshold;
+
+    // Find bounding box of dark pixels (excluding borders)
     $min_x = $width;
     $max_x = 0;
     $min_y = $height;
     $max_y = 0;
     $found = false;
 
-    // Find bounding box of pixels above threshold
-    for ($y = 0; $y < $height; $y++) {
-      for ($x = 0; $x < $width; $x++) {
-        if ($saliency[$y][$x] > $this->saliency_threshold) {
+    for ($y = $margin_y; $y < $height - $margin_y; $y++) {
+      for ($x = $margin_x; $x < $width - $margin_x; $x++) {
+        $brightness = $this->get_brightness($image, $x, $y);
+        if ($brightness < $threshold) {
           $found = true;
           $min_x = min($min_x, $x);
           $max_x = max($max_x, $x);
@@ -140,6 +158,15 @@ class SaliencyDetector {
       'width' => $max_x - $min_x + 1,
       'height' => $max_y - $min_y + 1
     );
+  }
+
+  // Get brightness of a pixel (0-255)
+  private function get_brightness($image, $x, $y) {
+    $rgb = imagecolorat($image, $x, $y);
+    $r = ($rgb >> 16) & 0xFF;
+    $g = ($rgb >> 8) & 0xFF;
+    $b = $rgb & 0xFF;
+    return intval(0.299 * $r + 0.587 * $g + 0.114 * $b);
   }
 
   // Apply padding around the detected region
