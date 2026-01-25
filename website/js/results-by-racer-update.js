@@ -48,7 +48,7 @@ function process_newresults(data) {
     var next_heat = data['next-heat'];
 
     notice_change_current_tbody(current.tbodyid, current.round,
-                                current.classname);
+                                current.classname, current.now_racing);
   });
 }
 
