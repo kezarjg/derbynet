@@ -4,9 +4,47 @@ require_once('inc/name-mangler.inc');
 require_once('inc/path-info.inc');
 require_once('inc/photo-config.inc');
 require_once('inc/schema_version.inc');
+require_once('inc/awards.inc');
 
 function url_for_cropped(&$row, $column_name, &$repository) {
   return $repository->url_for_file($row[$column_name], $row['racerid'], RENDER_CROPPED);
+}
+
+function get_racer_awards($racerid) {
+  global $db;
+  $awards = array();
+  
+  // Get regular awards with class name
+  $stmt = $db->prepare('SELECT Awards.awardname, Classes.class FROM Awards'
+                       .' LEFT JOIN Classes ON Awards.classid = Classes.classid'
+                       .' WHERE Awards.racerid = :racerid AND Awards.awardtypeid <> :adhoc_typeid');
+  $stmt->execute(array(':racerid' => $racerid, ':adhoc_typeid' => AD_HOC_AWARDTYPEID));
+  foreach ($stmt as $row) {
+    $name = $row['awardname'];
+    if (!empty($row['class'])) {
+      $name .= ' - ' . $row['class'];
+    }
+    $awards[] = array('name' => $name, 'type' => 'regular');
+  }
+  
+  // Get ad hoc awards
+  $stmt = $db->prepare('SELECT awardname FROM Awards'
+                       .' WHERE racerid = :racerid AND awardtypeid = :adhoc_typeid');
+  $stmt->execute(array(':racerid' => $racerid, ':adhoc_typeid' => AD_HOC_AWARDTYPEID));
+  foreach ($stmt as $row) {
+    $awards[] = array('name' => $row['awardname'], 'type' => 'adhoc');
+  }
+  
+  // Get speed awards
+  $speed_awards = array();
+  add_speed_awards($speed_awards);
+  foreach ($speed_awards as $speed_award) {
+    if ($speed_award['racerid'] == $racerid) {
+      $awards[] = array('name' => $speed_award['awardname'], 'type' => 'speed');
+    }
+  }
+  
+  return $awards;
 }
 
 
@@ -86,6 +124,13 @@ if (!$done && $mode == 'racer') {
                  'carname' => $row['carname'],
                  'next' => array('mode' => 'racer',
                                  'racerid' => $row['racerid']));
+    
+    // Get awards for this racer
+    $racer_awards = get_racer_awards($row['racerid']);
+    if (!empty($racer_awards)) {
+      $out['awards'] = $racer_awards;
+    }
+    
     if (isset($row['carphoto'])) {
       $out['photo'] = url_for_cropped($row, 'carphoto', car_photo_repository());
       if (isset($row['imagefile'])) {
