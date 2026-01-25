@@ -57,3 +57,103 @@ p.maintitle {
   visibility: hidden;
   display: none;
 }
+
+/* Award indicators for slideshow */
+.award_indicators {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.award_indicator {
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 16px;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.award_indicator.speed_award {
+  background-color: rgba(255, 215, 0, 0.9); /* Gold background for speed awards */
+}
+
+.award_indicator.regular_award {
+  background-color: rgba(100, 149, 237, 0.9); /* Blue background for regular awards */
+  color: white;
+}
+
+.award_indicator.adhoc_award {
+  background-color: rgba(192, 192, 192, 0.9); /* Silver background for ad hoc awards */
+}
+
+/* Pause/play indicator */
+.pause_indicator {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  z-index: 4;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 16px;
+  display: none;
+}
+
+.pause_indicator.visible {
+  display: block;
+}
+
+/* Help hint - shows briefly on load */
+.help_hint {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 4;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  opacity: 1;
+  transition: opacity 0.5s ease-out;
+}
+
+.help_hint.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Help overlay */
+.help_overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  background-color: rgba(0, 0, 0, 0.85);
+  color: white;
+  padding: 20px 30px;
+  border-radius: 8px;
+  font-size: 18px;
+  line-height: 1.8;
+}
+
+.help_overlay.hidden {
+  display: none;
+}
+
+.help_overlay p {
+  margin: 8px 0;
+}
+
+.help_overlay b {
+  display: inline-block;
+  min-width: 80px;
+}
